@@ -364,7 +364,7 @@ if __name__ == "__main__":
 
     while True:
         soil_sensor = Modbus_Soil_Sensor(serial_port=soil_sensor_port)
-        delay_time = 0.12
+        delay_time = 0.12   # 测试出来的最稳定的通信间隔
         
         print(f"device address 0x{soil_sensor.read_address():02X}")
         time.sleep(delay_time)
