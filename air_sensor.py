@@ -128,6 +128,9 @@ class Modbus_Air_Sensor(ModbusRTUDevice):
 
     def __del__(self):
         super().__del__()
+        
+    def close(self):
+        super().close()
     
     def build_read_frame(self, starting_address, quantity = 1):
         frame = ModbusRTU_Frame()

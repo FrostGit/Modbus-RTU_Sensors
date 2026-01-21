@@ -104,6 +104,10 @@ class ModbusRTUDevice:
         if hasattr(self,'serial_port') and self.serial_port.is_open:
             self.serial_port.reset_input_buffer()
             self.serial_port.reset_output_buffer()
+        
+    def close(self):
+        if hasattr(self,'serial_port') and self.serial_port.is_open:
+            self.serial_port.close()
     
 
     def _get_exception_text(self, exception_code):

@@ -50,6 +50,9 @@ class Modbus_Soil_Sensor(ModbusRTUDevice):
 
     def __del__(self):
         super().__del__()
+        
+    def close(self):
+        return super().close()
     
     def build_read_frame(self, starting_address, quantity = 1):
         frame = ModbusRTU_Frame()
