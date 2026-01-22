@@ -4,6 +4,24 @@
 import time
 import serial
 
+class HeartRateSensor:
+    """
+    心率传感器类，提供与心率传感器通信的基本功能
+    """
+    def __init__(self, serial_port, baudrate=38400, timeout=1):
+        self.serial_port = serial.Serial(port=serial_port,
+                                         baudrate=baudrate,
+                                         timeout=timeout)
+    
+    def __del__(self):
+        self.close()
+    
+    def close(self):
+        if self.serial_port.is_open:
+            self.serial_port.close()
+        
+        
+
 if __name__ == "__main__":
     """
     串口发送0x8A 测试 HeartRate模块的基本功能
