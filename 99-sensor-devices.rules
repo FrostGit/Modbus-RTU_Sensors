@@ -1,0 +1,25 @@
+# 气体传感器HUB (多层匹配)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", ATTRS{devpath}=="1.2", SYMLINK+="gas_hub", GROUP="dialout", MODE="0660"
+
+# 土壤传感器 (多层匹配)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", ATTRS{devpath}=="1.3.3.3", SYMLINK+="soil_sensor", GROUP="dialout", MODE="0660"
+
+# 心率传感器 (多层匹配)
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", ATTRS{devpath}=="1.3.3.4", SYMLINK+="hr_band", GROUP="dialout", MODE="0660"
+
+# 生命体征传感器
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", ATTRS{devpath}=="1.3.4.1", SYMLINK+="vital_signs", GROUP="dialout", MODE="0660"
+
+# USB气象传感器
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ATTRS{serial}=="0001", SYMLINK+="weather_sensor", GROUP="dialout", MODE="0660"
+
+# Power Sensor - CH340 USB to Serial Converter
+SUBSYSTEM=="tty", \
+ATTRS{idVendor}=="1a86", \
+ATTRS{idProduct}=="55d4", \
+ATTRS{serial}=="5954004419", \
+SYMLINK+="power_sensor", \
+GROUP="dialout", \
+MODE="0660", \
+ENV{ID_MM_DEVICE_IGNORE}="1", \
+ENV{ID_MM_CANDIDATE}="0"
