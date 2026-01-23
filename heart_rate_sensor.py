@@ -26,11 +26,13 @@ if __name__ == "__main__":
     """
     串口发送0x8A 测试 HeartRate模块的基本功能
     """
-    heart_reat_port = "/dev/heart_rate_sensor"  # 心率传感器串口路径
+    heart_reat_band_port = "/dev/hr_band"  # 心率传感器串口路径
+    heart_reat_vital_signs_port = "/dev/vital_signs"  # 心率传感器串口路径
+    
     baudrate = 38400  # 波特率
     timeout = 1  # 超时时间（秒）
     command = bytes([0x8A])  # 发送的命令字节
-    serial_port = serial.Serial(port=heart_reat_port,
+    serial_port = serial.Serial(port=heart_reat_band_port,
                                 baudrate=baudrate,
                                 timeout=timeout)
     try:
