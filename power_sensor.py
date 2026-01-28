@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import time
-import serial
 from lib_ModbusRTUDevice import ModbusRTUDevice, ModbusRTU_Frame, ModbusException
 
 class PowerSensor(ModbusRTUDevice):
