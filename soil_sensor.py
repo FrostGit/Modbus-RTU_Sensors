@@ -389,4 +389,4 @@ if __name__ == "__main__":
         time.sleep(delay_time)
         print(f"PH {soil_sensor.read_PH()}")
         time.sleep(delay_time)
-        break
+        # break

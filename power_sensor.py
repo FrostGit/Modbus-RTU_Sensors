@@ -33,7 +33,7 @@ class PowerSensor(ModbusRTUDevice):
     regVoltage  = 0x0BB8        # 电压寄存器地址        长度2寄存器长度 fn: 3
     regCurrent  = 0x0BBA        # 电流寄存器地址        长度2 fn: 3
     regPower    = 0x0BBC        # 功率寄存器地址        长度2 fn: 3
-    regEnergy   = 0x0BC0        # 累计电量寄存器地址    长度2 fn: 3
+    regEnergy   = 0x0BBE        # 累计电量寄存器地址    长度2 fn: 3
     regBaudrate = 0x0C1C        # 波特率寄存器地址      长度1 fn: 3,6,16    范围: 1-6 对应波特率 4800,9600,19200,38400,57600,115200 默认： 2
     regAddress  = 0x0C21        # 设备地址寄存器地址    长度1 fn: 3,6,16    范围: 1-247 默认：1
     regClearEnergy = 0x0C26     # 清除累计电量寄存器地址 长度1 fn: 3,6,16    写入0x1234清零累计电量
@@ -49,7 +49,7 @@ class PowerSensor(ModbusRTUDevice):
     def __init__(self, serial_port, baudrate=9600, timeout=1):
         self.address = self.default_address
         self.unit = self.default_units
-        super().__init__(serial_port, baudrate, timeout)
+        super().__init__(serial_port = serial_port, baudrate=baudrate, timeout=timeout)
         
     
     def __del__(self):
@@ -80,7 +80,7 @@ class PowerSensor(ModbusRTUDevice):
         frame.StartingAddress_L = start_address & 0xFF
         frame.Quantity_H = (length >> 8) & 0xFF
         frame.Quantity_L = length & 0xFF
-        return frame.to_bytes()
+        return frame
 
     def read_voltage(self):
         """
@@ -89,12 +89,15 @@ class PowerSensor(ModbusRTUDevice):
             电压值,浮点数，单位V
         
         """
+        print()
         frame = self.build_read_frame(self.regVoltage, 2)
         response = self.send_request_get_response(frame)
-        if len(response) == 7:
-            voltage_raw = (response[3] << 0xFF000000) | (response[4] << 0x00FF0000) | (response[5] << 0x0000FF00) | response[6]
+        if len(response) == 9:
+            voltage_raw = (response[3] << 24) | (response[4] << 16) | (response[5] << 8) | response[6]
+            print(voltage_raw)
             if voltage_raw >= 0x80000000:  # 处理有符号整数
                 voltage_raw -= 0x100000000
+            print(voltage_raw)
             voltage = voltage_raw / 1000.0 # 数据为mV,转换为实际电压值
             return voltage
         else:
@@ -108,8 +111,8 @@ class PowerSensor(ModbusRTUDevice):
         """
         frame = self.build_read_frame(self.regCurrent, 2)
         response = self.send_request_get_response(frame)
-        if len(response) == 7:
-            current_raw = (response[3] << 0xFF000000) | (response[4] << 0x00FF0000) | (response[5] << 0x0000FF00) | response[6]
+        if len(response) == 9:
+            current_raw = (response[3] << 24) | (response[4] << 16) | (response[5] << 8) | response[6]
             if current_raw >= 0x80000000:  # 处理有符号整数
                 current_raw -= 0x100000000
             current = current_raw / 1000.0 # 数据为mA,转换为实际电流值
@@ -125,8 +128,8 @@ class PowerSensor(ModbusRTUDevice):
         """
         frame = self.build_read_frame(self.regPower, 2)
         response = self.send_request_get_response(frame)
-        if len(response) == 7:
-            power_raw = (response[3] << 0xFF000000) | (response[4] << 0x00FF0000) | (response[5] << 0x0000FF00) | response[6]
+        if len(response) == 9:
+            power_raw = (response[3] << 24) | (response[4] << 16) | (response[5] << 8) | response[6]
             if power_raw >= 0x80000000:  # 处理有符号整数
                 power_raw -= 0x100000000
             power = power_raw / 1000.0 # 数据为mW,转换为实际功率值
@@ -142,11 +145,11 @@ class PowerSensor(ModbusRTUDevice):
         """
         frame = self.build_read_frame(self.regEnergy, 2)
         response = self.send_request_get_response(frame)
-        if len(response) == 7:
-            energy_raw = (response[3] << 0xFF000000) | (response[4] << 0x00FF0000) | (response[5] << 0x0000FF00) | response[6]
+        if len(response) == 9:
+            energy_raw = (response[3] << 24) | (response[4] << 16) | (response[5] << 8) | response[6]
             if energy_raw >= 0x80000000:  # 处理有符号整数
                 energy_raw -= 0x100000000
-                energy = energy_raw /10.0 # 数据为0.1Wh,转换为实际电量值
+            energy = energy_raw /10.0 # 数据为0.1Wh,转换为实际电量值
             return energy
         else:
             raise ModbusException("Failed to read energy")
@@ -160,8 +163,8 @@ class PowerSensor(ModbusRTUDevice):
         """
         frame = self.build_read_frame(self.regBaudrate, 1)
         response = self.send_request_get_response(frame)
-        if len(response) == 5:
-            baudrate_code = response[3]
+        if len(response) == 7:
+            baudrate_code = response[4]
             baudrate_map = {
                 1: 4800,
                 2: 9600,
@@ -183,8 +186,8 @@ class PowerSensor(ModbusRTUDevice):
         """
         frame = self.build_read_frame(self.regAddress, 1)
         response = self.send_request_get_response(frame)
-        if len(response) == 5:
-            device_address = response[3]
+        if len(response) == 7:
+            device_address = response[4]
             return device_address
         else:
             raise ModbusException("Failed to read device address")
@@ -197,8 +200,8 @@ class PowerSensor(ModbusRTUDevice):
         """
         frame = self.build_read_frame(self.regUnits, 1)
         response = self.send_request_get_response(frame)
-        if len(response) == 5:
-            units_code = response[3]
+        if len(response) == 7:
+            units_code = response[4]
             self.unit = units_code
             return self.get_device_unit()
         else:
@@ -208,12 +211,12 @@ class PowerSensor(ModbusRTUDevice):
         """读取当前采样频率设置，单位Hz
         
         Returns:
-            采样频率值，范围1-20Hz
+            # 采样频率值，范围1-20Hz
         """
         frame = self.build_read_frame(self.regSampleRate, 1)
         response = self.send_request_get_response(frame)
-        if len(response) == 5:
-            sample_rate = response[3]
+        if len(response) == 7:
+            sample_rate = response[4]
             return sample_rate
         else:
             raise ModbusException("Failed to read sample rate")
@@ -230,8 +233,8 @@ class PowerSensor(ModbusRTUDevice):
         """
         frame = self.build_read_frame(self.regEnergyAccMode, 1)
         response = self.send_request_get_response(frame)
-        if len(response) == 5:
-            mode_code = response[3]
+        if len(response) == 7:
+            mode_code = response[4]
             mode_map = {
                 0: "仅正向积累",
                 1: "仅负向积累",
@@ -252,8 +255,8 @@ class PowerSensor(ModbusRTUDevice):
         """
         frame = self.build_read_frame(self.regVoltageLevel, 1)
         response = self.send_request_get_response(frame)
-        if len(response) == 5:
-            level_code = response[3]
+        if len(response) == 7:
+            level_code = response[4]
             level_map = {
                 0: "自动挡",
                 1: "60V档",
@@ -271,8 +274,8 @@ class PowerSensor(ModbusRTUDevice):
         """
         frame = self.build_read_frame(self.regCoulombVoltage, 2)
         response = self.send_request_get_response(frame)
-        if len(response) == 5:
-            coulomb_voltage = (response[3] << 0xFF000000) | (response[4] << 0x00FF0000) | (response[5] << 0x0000FF00) | response[6]
+        if len(response) == 9:
+            coulomb_voltage = (response[3] << 24) | (response[4] << 16) | (response[5] << 8) | response[6]
             return coulomb_voltage
         else:
             raise ModbusException("Failed to read coulomb voltage")
@@ -470,6 +473,26 @@ if __name__ == "__main__":
         
         units = power_sensor.read_units()
         print(f"Units: {units}")
+        time.sleep(0.1)
+        
+        voltage_level = power_sensor.read_voltage_level()
+        print(f"Voltage Level: {voltage_level}")
+        time.sleep(0.1)
+        
+        baudrate = power_sensor.read_baudrate()
+        print(f"Baudrate: {baudrate} bps")
+        time.sleep(0.1)
+        
+        address = power_sensor.read_address()
+        print(f"Device Address: 0x{address:02X}")
+        time.sleep(0.1)
+        
+        sample_rate = power_sensor.read_sample_rate()
+        print(f"Sample Rate: {sample_rate} Hz")
+        time.sleep(0.1)
+        
+        accumulation_mode = power_sensor.read_energy_accumulation_mode()
+        print(f"Energy Accumulation Mode: {accumulation_mode}")
         time.sleep(0.1)
         
     except ModbusException as e:
