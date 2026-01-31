@@ -14,26 +14,21 @@ typedef struct {
     uint8_t heart_rate;     // 心率值
     uint8_t spo2;           // 血氧饱和度值
     uint8_t bk;             // 微循环
-    uint8_t rsv[8];         // 保留字节 rsv[0] 疲劳指数 rsv[1] - rsv[2] 保留 rsv[3] 收缩压 rsv[4] 舒张压 rsv[5] 心输出 rsv[6] 外周阻力 rsv[7] rr间期变异性
-    uint8_t sdnn;           // 心率变异性 SDNN
-    uint8_t rmssd;          // 心率变异性 RMSSD
-    uint8_t nn50;           // 心率变异性 NN50
-    uint8_t pnn50;          // 心率变异性 PNN50
-    uint8_t rra[6];         // rr间期
-    uint8_t rsv2[2];        // 保留字节
+    uint8_t rsv[8];         // 保留字节 rsv[0] - rsv[2] 保留 rsv[3] 收缩压 rsv[4] 舒张压 rsv[5] - rsv[7] 保留
     } RT_PACK;
     
 """
 
 
-class VitalSignsPacket:
+class BandHrPacket:
     """
     生命体征数据包类，用于解析和封装心率传感器的数据包
-    总长度：88字节
+    总长度：88字节 76字节有效
     """
     # 数据包格式定义
     PACKET_SIZE = 88
-    PACKET_FORMAT = '<B64bBBB8sBBBB6B2B'  # struct.unpack格式字符串
+    VALID_DATA_SIZE = 76
+    PACKET_FORMAT = '<B64bBBB8s'  # struct.unpack格式字符串
     START_BYTE = 0xFF
     
     def __init__(self, data: bytes = None):
@@ -47,16 +42,8 @@ class VitalSignsPacket:
         self.heart_rate = 0  # 心率值
         self.spo2 = 0  # 血氧饱和度
         self.bk = 0  # 微循环
-        self.fatigue_index = 0  # 疲劳指数 (rsv[0])
         self.systolic_pressure = 0  # 收缩压 (rsv[3])
         self.diastolic_pressure = 0  # 舒张压 (rsv[4])
-        self.cardiac_output = 0  # 心输出 (rsv[5])
-        self.peripheral_resistance = 0  # 外周阻力 (rsv[6])
-        self.rr_variability = 0  # rr间期变异性 (rsv[7])
-        self.sdnn = 0  # 心率变异性 SDNN
-        self.rmssd = 0  # 心率变异性 RMSSD
-        self.pnn50 = 0  # 心率变异性 PNN50
-        self.rra = []  # rr间期 (6个字节)
         
         if data is not None:
             self.parse(data)
@@ -74,7 +61,7 @@ class VitalSignsPacket:
         if data[0] != self.START_BYTE:
             print(f"错误：起始字节不匹配，期望0x{self.START_BYTE:02X}，实际0x{data[0]:02X}")
             return False
-        
+        data = data[:self.VALID_DATA_SIZE]
         try:
             # 使用struct解析数据
             print(f"length of data: {len(data)}")
@@ -93,19 +80,8 @@ class VitalSignsPacket:
             
             # 解析rsv[8]
             rsv = unpacked[68]
-            self.fatigue_index = rsv[0]
             self.systolic_pressure = rsv[3]
             self.diastolic_pressure = rsv[4]
-            self.cardiac_output = rsv[5]
-            self.peripheral_resistance = rsv[6]
-            self.rr_variability = rsv[7]
-            
-            self.sdnn = unpacked[69]
-            self.rmssd = unpacked[70]
-            self.nn50 = unpacked[71]
-            self.pnn50 = unpacked[72]
-            self.rra = list(unpacked[73:79])  # 6个rr间期
-            
             return True
         except struct.error as e:
             print(f"错误：解析数据失败 - {e}")
@@ -121,17 +97,9 @@ class VitalSignsPacket:
             'heart_rate': self.heart_rate,
             'spo2': self.spo2,
             'bk': self.bk,
-            'fatigue_index': self.fatigue_index,
             'systolic_pressure': self.systolic_pressure,
             'diastolic_pressure': self.diastolic_pressure,
-            'cardiac_output': self.cardiac_output,
-            'peripheral_resistance': self.peripheral_resistance,
-            'rr_variability': self.rr_variability,
-            'sdnn': self.sdnn,
-            'rmssd': self.rmssd,
-            'pnn50': self.pnn50,
             'acdata_count': len(self.acdata),
-            'rra': self.rra
         }
     
     def __str__(self) -> str:
@@ -144,17 +112,9 @@ class VitalSignsPacket:
         - 心率: {self.heart_rate} bpm
         - 血氧饱和度: {self.spo2}%
         - 微循环: {self.bk}
-        - 疲劳指数: {self.fatigue_index}
         - 收缩压: {self.systolic_pressure} mmHg
         - 舒张压: {self.diastolic_pressure} mmHg
-        - 心输出: {self.cardiac_output}
-        - 外周阻力: {self.peripheral_resistance}
-        - rr间期变异性: {self.rr_variability}
-        - 心率变异性 SDNN: {self.sdnn}
-        - 心率变异性 RMSSD: {self.rmssd}
-        - 心率变异性 PNN50: {self.pnn50}
         - 心律波形数据点数: {len(self.acdata)}
-        - rr间期: {self.rra}
         """
 
 
@@ -194,24 +154,24 @@ class HeartRateSensor:
             print(f"发送命令失败: {e}")
             return False
     
-    def read_packet(self) -> VitalSignsPacket:
+    def read_packet(self) -> BandHrPacket:
         """
         从串口读取一个完整的数据包
-        :return: 解析后的VitalSignsPacket对象，如果失败返回None
+        :return: 解析后的BandHrPacket对象，如果失败返回None
         """
         try:
             # 等待数据到达
-            if self.serial_port.in_waiting < VitalSignsPacket.PACKET_SIZE:
+            if self.serial_port.in_waiting < BandHrPacket.PACKET_SIZE:
                 return None
             
             # 读取数据包
-            raw_data = self.serial_port.read(VitalSignsPacket.PACKET_SIZE)
+            raw_data = self.serial_port.read(BandHrPacket.PACKET_SIZE)
             
             # 解析数据包
-            packet = VitalSignsPacket(raw_data)
+            packet = BandHrPacket(raw_data)
             return packet if all([
-                packet.start_byte == VitalSignsPacket.START_BYTE,
-                len(raw_data) == VitalSignsPacket.PACKET_SIZE
+                packet.start_byte == BandHrPacket.START_BYTE,
+                len(raw_data) == BandHrPacket.PACKET_SIZE
             ]) else None
         except Exception as e:
             print(f"读取数据包失败: {e}")
@@ -222,7 +182,7 @@ class HeartRateSensor:
         连续读取多个数据包
         :param count: 要读取的数据包数量
         :param timeout: 超时时间（秒），None表示不设置超时
-        :return: 成功解析的VitalSignsPacket列表
+        :return: 成功解析的BandHrPacket列表
         """
         packets = []
         start_time = time.time() if timeout else None
@@ -244,8 +204,7 @@ if __name__ == "__main__":
     """
     心率传感器使用示例
     """
-    # heart_rate_port = "/dev/hr_band"  # 心率传感器串口路径
-    heart_rate_port = "/dev/vital_signs"  # 心率传感器串口路径
+    heart_rate_port = "/dev/hr_band"  # 心率传感器串口路径
     
     baudrate = 38400  # 波特率
     timeout = 1  # 超时时间（秒）
@@ -259,6 +218,8 @@ if __name__ == "__main__":
         
         # 发送工作模式命令
         if sensor.send_command(sensor.CMD_MODE_WORK):
+            for i in range(2):
+                sensor.send_command(sensor.CMD_MODE_WORK)
             print("已发送工作模式命令")
             while True:
                 packet = sensor.read_packet()
