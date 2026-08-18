@@ -12,7 +12,8 @@
 | `soil_sensor.py` / `soil_sensor_plt.py` | 土壤传感器驱动 / 实时绘图 |
 | `heart_rate_sensor.py` | 生命体征传感器驱动（88 字节协议包解析、帧同步，含 HRV/血压等指标） |
 | `sensor_hub.py` / `sensor_hub_plt.py` | 气体传感器 HUB 驱动 / 实时绘图 |
-| `big_plt_demo.py` | 多传感器综合大屏（本地 matplotlib：19 路折线 + 5 个数字卡片，5×5 布局） |
+| `big_plt_demo.py` | 多传感器综合大屏（matplotlib 版：19 路折线 + 5 卡片，适合 PC 端） |
+| `big_plt_qt.py` | 多传感器综合大屏（**pyqtgraph 实时版，X3 本地显示推荐**：19 折线 + 5 卡片，每帧 <50ms） |
 | `web_dashboard.py` / `web/` | 远程监看服务（Flask + Web：19 路折线 + 16 个数字卡片 + 脉搏波 + RR 散点） |
 | `heart_wave_plt.py` | 生命体征波形快速显示（脉搏波滚动 + RR 间期散点） |
 | `sensor_acq.py` | 采集公共模块（big_plt 与 web_dashboard 共用同一套批量读逻辑） |
@@ -47,7 +48,7 @@ udev 规则按 `idVendor`/`idProduct`/`devpath`/`serial` 多层匹配，将 CH34
 ## 运行环境
 
 - Python 3.8+（开发目标板：RDK X3）
-- 依赖：`pyserial`、`numpy`、`matplotlib`、`Pillow`；`crcmod` 可选（缺失时自动使用内置纯 Python CRC16 实现）；`web_dashboard.py` 另需 `flask`
+- 依赖：`pyserial`、`numpy`、`matplotlib`、`Pillow`；`crcmod` 可选（缺失时自动使用内置纯 Python CRC16 实现）；`web_dashboard.py` 另需 `flask`；`big_plt_qt.py` 另需 `pyqt5` + `pyqtgraph`
 
 ```bash
 pip install pyserial numpy matplotlib pillow crcmod
@@ -56,7 +57,11 @@ pip install pyserial numpy matplotlib pillow crcmod
 ## 使用
 
 ```bash
-# 多传感器综合大屏（本地 matplotlib：19 折线 + 5 卡片）
+# X3 本地实时大屏（pyqtgraph，推荐；X3 上 matplotlib 渲染约 3.6s/帧，本方案 <50ms）
+pip3 install pyqt5 pyqtgraph   # 首次需要
+python3 big_plt_qt.py
+
+# 多传感器大屏（matplotlib 版，PC 端用）
 python3 big_plt_demo.py --draw-every 2
 
 # 生命体征波形快速显示（脉搏波 + RR 散点）
