@@ -5,7 +5,8 @@
 - 驱动对象实例化一次、全程复用
 - 批量读 read_all()：气象6/土壤8/电源8寄存器各1次往返，气体4从站串行，生命体征流式
 - 单类传感器失败返回 None 对应字段，不中断整轮
-- 通道元数据 CURVES/PLACEMENT 为唯一来源，本地与 Web 共用
+- 通道元数据（折线/卡片/布局）为唯一来源，本地与 Web 共用
+- 生命体征波形(acdata)与RR间期(rra)随采集缓存，供 web 波形面板与散点使用
 """
 import time
 
@@ -25,67 +26,70 @@ PORTS = {
     "vital": "/dev/vital_signs",
 }
 
-# ---- 通道元数据: key -> (标题, 单位, 颜色) ----
-CURVES = {
+# ---- 折线通道: key -> (标题, 单位, 颜色) ----
+LINE_CHANNELS = {
     # 气体 4
     "smoke": ("烟雾传感器", "ppm", "r"),
     "co2": ("二氧化碳传感器", "ppm", "g"),
     "o2": ("氧气传感器", "%VOL", "b"),
     "ch4": ("甲烷传感器", "%LEL", "y"),
-    # 气象 6
+    # 气象 5（海拔改卡片）
     "temperature": ("空气温度", "℃", "c"),
     "humidity": ("空气湿度", "%", "m"),
     "dewpoint": ("露点温度", "℃", "r"),
     "pressure": ("大气压力", "hPa", "g"),
-    "altitude": ("海拔高度", "m", "b"),
     "air_density": ("空气密度", "Kg/m³", "k"),
-    # 电源 4
+    # 电源 3（累计电量改卡片）
     "voltage": ("电压", "V", "r"),
-    "power": ("功率", "W", "g"),
     "current": ("电流", "A", "k"),
-    "energy": ("电量", "Wh", "r"),
-    # 土壤 8
-    "soil_moisture": ("土壤湿度", "%", "m"),
-    "soil_ec": ("土壤电导率", "µS/cm", "r"),
-    "soil_salty": ("土壤盐分", "mg/L", "g"),
-    "soil_nitro": ("土壤氮含量", "mg/kg", "b"),
-    "soil_phosphorus": ("土壤磷含量", "mg/kg", "y"),
-    "soil_potassium": ("土壤钾含量", "mg/kg", "c"),
-    "soil_ph": ("土壤PH值", "pH", "m"),
+    "power": ("功率", "W", "g"),
+    # 土壤 5（氮磷钾改卡片）
     "soil_temp": ("土壤温度", "℃", "r"),
-    # 生命体征 13
+    "soil_moisture": ("土壤湿度", "%", "m"),
+    "soil_ec": ("土壤电导率", "µS/cm", "b"),
+    "soil_salty": ("土壤盐分", "mg/L", "y"),
+    "soil_ph": ("土壤PH值", "pH", "c"),
+    # 生命体征 2（仅心率/血氧折线）
     "heart_rate": ("心率", "bpm", "r"),
     "spo2": ("血氧", "%", "g"),
-    "bk": ("微循环", "", "b"),
-    "fatigue_index": ("疲劳指数", "", "y"),
-    "systolic_pressure": ("收缩压", "mmHg", "c"),
-    "diastolic_pressure": ("舒张压", "mmHg", "k"),
-    "cardiac_output": ("心输出", "", "r"),
-    "peripheral_resistance": ("外周阻力", "", "g"),
-    "rr_variability": ("RR变异性", "", "b"),
-    "sdnn": ("SDNN", "ms", "y"),
-    "rmssd": ("RMSSD", "ms", "c"),
-    "nn50": ("NN50", "", "k"),
-    "pnn50": ("PNN50", "%", "r"),
 }
 
-# ---- 布局: 5 行 x 8 列；(4,5)-(4,7) 留空 ----
-PLACEMENT = [
-    (0, 0, "smoke"), (0, 1, "co2"), (0, 2, "o2"), (0, 3, "ch4"),
-    (0, 4, "temperature"), (0, 5, "humidity"), (0, 6, "voltage"), (0, 7, "power"),
-    (1, 0, "dewpoint"), (1, 1, "pressure"), (1, 2, "altitude"),
-    (1, 5, "soil_moisture"), (1, 6, "current"), (1, 7, "energy"),
-    (2, 0, "soil_ec"), (2, 1, "soil_salty"), (2, 2, "soil_nitro"),
-    (2, 3, "soil_phosphorus"), (2, 4, "soil_potassium"), (2, 5, "soil_ph"),
-    (2, 6, "air_density"), (2, 7, "soil_temp"),
-    (3, 0, "heart_rate"), (3, 1, "spo2"), (3, 2, "bk"), (3, 3, "fatigue_index"),
-    (3, 4, "systolic_pressure"), (3, 5, "diastolic_pressure"),
-    (3, 6, "cardiac_output"), (3, 7, "peripheral_resistance"),
-    (4, 0, "rr_variability"), (4, 1, "sdnn"), (4, 2, "rmssd"),
-    (4, 3, "nn50"), (4, 4, "pnn50"),
+# ---- 数字卡片通道(plt 与 web 都显示): key -> (标题, 单位) ----
+CARD_CHANNELS = {
+    "energy": ("累计电量", "Wh"),
+    "altitude": ("海拔高度", "m"),
+    "soil_nitro": ("土壤氮含量", "mg/kg"),
+    "soil_phosphorus": ("土壤磷含量", "mg/kg"),
+    "soil_potassium": ("土壤钾含量", "mg/kg"),
+}
+
+# ---- 生命体征卡片(仅 web 前端显示): key -> (标题, 单位) ----
+VITAL_CARD_CHANNELS = {
+    "bk": ("微循环", ""),
+    "fatigue_index": ("疲劳指数", ""),
+    "systolic_pressure": ("收缩压", "mmHg"),
+    "diastolic_pressure": ("舒张压", "mmHg"),
+    "cardiac_output": ("心输出", ""),
+    "peripheral_resistance": ("外周阻力", ""),
+    "rr_variability": ("RR变异性", ""),
+    "sdnn": ("SDNN", "ms"),
+    "rmssd": ("RMSSD", "ms"),
+    "nn50": ("NN50", ""),
+    "pnn50": ("PNN50", "%"),
+}
+
+# ---- 折线布局: 4 行 x 5 列（(3,4) 留给 plt 的 logo 图） ----
+LINE_PLACEMENT = [
+    (0, 0, "smoke"), (0, 1, "co2"), (0, 2, "o2"), (0, 3, "ch4"), (0, 4, "temperature"),
+    (1, 0, "humidity"), (1, 1, "dewpoint"), (1, 2, "pressure"), (1, 3, "air_density"), (1, 4, "voltage"),
+    (2, 0, "current"), (2, 1, "power"), (2, 2, "soil_temp"), (2, 3, "soil_moisture"), (2, 4, "soil_ec"),
+    (3, 0, "soil_salty"), (3, 1, "soil_ph"), (3, 2, "heart_rate"), (3, 3, "spo2"),
 ]
 
-# 生命体征通道（流式主动上报，读不到新包时沿用缓存值）
+# ---- plt 卡片行顺序 ----
+CARD_KEYS = ["energy", "altitude", "soil_nitro", "soil_phosphorus", "soil_potassium"]
+
+# 生命体征 13 字段（流式主动上报，读不到新包时沿用缓存值）
 VITAL_FIELDS = [
     "heart_rate", "spo2", "bk", "fatigue_index",
     "systolic_pressure", "diastolic_pressure",
@@ -144,7 +148,9 @@ def read_round(sensors, vital_cache=None):
         vital_cache: 生命体征上次成功缓存（流式无新包时沿用），None 则初始化
 
     Returns:
-        (values, vital_cache): values 为 {通道key: 数值或None}
+        (values, vital_cache):
+            values 为 {通道key: 数值或None}（35 路全量，展示端自行取舍）
+            vital_cache 含 13 项指标 + acdata(64点波形) + rra(6个RR间期)
     """
     if vital_cache is None:
         vital_cache = {}
@@ -192,6 +198,8 @@ def read_round(sensors, vital_cache=None):
                     "rmssd": pkt.rmssd,
                     "nn50": pkt.nn50,
                     "pnn50": pkt.pnn50,
+                    "acdata": list(pkt.acdata),   # 64 点脉搏波
+                    "rra": list(pkt.rra),         # 6 个 RR 间期
                 }
         except Exception as e:
             print(f"生命体征读取失败: {e}")
@@ -209,6 +217,9 @@ if __name__ == "__main__":
         values, vital_cache = read_round(sensors, vital_cache)
         dt = (time.time() - t0) * 1000
         print(f"--- round {i + 1} ({dt:.0f} ms) ---")
-        for key, (title, unit, _) in CURVES.items():
+        for key in list(LINE_CHANNELS) + list(CARD_CHANNELS) + list(VITAL_CARD_CHANNELS):
             v = values.get(key)
-            print(f"  {title}({unit}): {v if v is not None else '-'}")
+            if v is not None:
+                print(f"  {key}: {v}")
+        if vital_cache.get("acdata"):
+            print(f"  波形点: {len(vital_cache['acdata'])}, RR间期: {vital_cache['rra']}")

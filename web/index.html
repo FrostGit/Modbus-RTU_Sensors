@@ -8,53 +8,105 @@
   body { margin:0; background:#1e1e2e; color:#eee; font-family:"Microsoft YaHei",sans-serif; }
   header { padding:10px 16px; font-size:18px; display:flex; align-items:baseline; gap:12px; }
   #status { font-size:13px; color:#8a8aa0; }
-  #grid { display:grid; grid-template-columns:repeat(8,1fr); gap:6px; padding:0 10px 12px; }
-  .card { background:#27293d; border-radius:6px; padding:6px 8px; }
-  .card .title { font-size:12px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  canvas { width:100%; height:110px; display:block; }
+  section { padding:4px 16px 8px; }
+  h2 { font-size:14px; color:#9aa; margin:10px 0 6px; }
+  #cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+  .card { background:#27293d; border-radius:6px; padding:8px 12px; }
+  .card .label { font-size:12px; color:#aab; }
+  .card .value { font-size:26px; font-weight:bold; margin-top:2px; }
+  .card .unit { font-size:13px; color:#889; margin-left:4px; }
+  #lines { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+  .lcard { background:#27293d; border-radius:6px; padding:6px 8px; }
+  .lcard .title { font-size:12px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  canvas { width:100%; display:block; }
+  .lcard canvas { height:110px; }
+  #waveRow { display:flex; gap:8px; }
+  #waveWrap, #rrWrap { background:#27293d; border-radius:6px; padding:8px; }
+  #waveWrap { flex:3; }
+  #rrWrap { flex:2; }
+  #waveWrap canvas, #rrWrap canvas { height:160px; }
 </style>
 </head>
 <body>
 <header>多模态传感器数据采集 <span id="status">连接中...</span></header>
-<div id="grid"></div>
+
+<section>
+  <h2>实时数值</h2>
+  <div id="cards"></div>
+</section>
+
+<section>
+  <h2>趋势曲线</h2>
+  <div id="lines"></div>
+</section>
+
+<section>
+  <h2>生命体征波形 / RR间期</h2>
+  <div id="waveRow">
+    <div id="waveWrap"><div class="lcard" style="background:none"><div class="title">脉搏波 (acdata)</div><canvas id="waveCanvas"></canvas></div></div>
+    <div id="rrWrap"><div class="lcard" style="background:none"><div class="title">RR 间期散点</div><canvas id="rrCanvas"></canvas></div></div>
+  </div>
+</section>
+
 <script>
 "use strict";
-const MAX = 300, POLL_MS = 300;
-// matplotlib 单字母颜色 -> CSS
+const MAX = 300, POLL_MS = 300, WAVE_MAX = 640, RR_MAX = 60;
 const CMAP = {r:'#e74c3c', g:'#2ecc71', b:'#3498db', y:'#f1c40f',
               c:'#00bcd4', m:'#e91e63', k:'#cfcfcf'};
-const channels = [];     // {key,title,unit,color,data:[]}
-const buf = {};          // key -> [{t,v}]
-const canvases = {};     // key -> <canvas>
+const lines = [];        // 折线通道 {key,title,color,data:[]}
+const buf = {};          // 折线数据缓冲
+const canvases = {};     // 折线 canvas
+const cards = {};        // 卡片 key -> 元素
 let lastTs = 0;
+let waveBuf = [];        // 波形滚动缓冲
+let rrBuf = [];          // RR 散点缓冲
 
 async function getJSON(url){
   const r = await fetch(url);
   return r.json();
 }
 
+function fmt(v){
+  if(v == null) return "--";
+  return Number.isInteger(v) ? v : Number(v).toFixed(1);
+}
+
 async function init(){
   const meta = await getJSON('/api/meta');
-  const grid = document.getElementById('grid');
-  for(const [row, col, key] of meta.placement){
-    const c = meta.curves[key];
-    const ch = {key, title:c.title, unit:c.unit,
-                color:(CMAP[c.color]||c.color), data:[]};
-    channels.push(ch);
+
+  // 数字卡片（通用 + 生命体征）
+  const cardBox = document.getElementById('cards');
+  const addCard = (key, c) => {
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.innerHTML = `<div class="label">${c.title}${c.unit?' ('+c.unit+')':''}</div>` +
+                   `<div class="value">--</div>`;
+    cardBox.appendChild(el);
+    cards[key] = el.querySelector('.value');
+  };
+  for(const [k, c] of Object.entries(meta.cards)) addCard(k, c);
+  for(const [k, c] of Object.entries(meta.vital_cards)) addCard(k, c);
+
+  // 折线（4x5 布局）
+  const lineBox = document.getElementById('lines');
+  for(const [row, col, key] of meta.line_placement){
+    const c = meta.lines[key];
+    const ch = {key, title:c.title, color:(CMAP[c.color]||c.color), data:[]};
+    lines.push(ch);
     buf[key] = [];
     const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `<div class="title">${ch.title}${ch.unit?' ('+ch.unit+')':''}</div><canvas></canvas>`;
-    grid.appendChild(card);
+    card.className = 'lcard';
+    card.innerHTML = `<div class="title">${ch.title}${c.unit?' ('+c.unit+')':''}</div><canvas></canvas>`;
+    lineBox.appendChild(card);
     canvases[key] = card.querySelector('canvas');
   }
+
   setInterval(loop, POLL_MS);
   loop();
 }
 
-function drawChannel(ch){
-  const cv = canvases[ch.key];
-  const ctx = cv.getContext('2d');
+function drawLine(ch){
+  const cv = canvases[ch.key], ctx = cv.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const w = cv.clientWidth, h = cv.clientHeight;
   if(!w || !h) return;
@@ -74,12 +126,10 @@ function drawChannel(ch){
   if(!isFinite(min) || !isFinite(max)) return;
   if(max === min){ max += 1; min -= 1; }
   const t0 = data[0].t, t1 = data[data.length-1].t, tr = (t1-t0)||1;
-  ctx.strokeStyle = ch.color;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
+  ctx.strokeStyle = ch.color; ctx.lineWidth = 1.5; ctx.beginPath();
   let pen = false;
   for(const p of data){
-    if(p.v == null){ pen = false; continue; }   // None -> 断口
+    if(p.v == null){ pen = false; continue; }
     const x = (p.t - t0) / tr * w;
     const y = h - (p.v - min) / (max - min) * h;
     if(!pen){ ctx.moveTo(x, y); pen = true; }
@@ -88,20 +138,84 @@ function drawChannel(ch){
   ctx.stroke();
 }
 
+function drawWave(){
+  const cv = document.getElementById('waveCanvas');
+  const ctx = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if(!w || !h) return;
+  if(cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)){
+    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  if(waveBuf.length < 2) return;
+  ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5; ctx.beginPath();
+  const n = waveBuf.length;
+  for(let i = 0; i < n; i++){
+    const x = i / (n-1) * w;
+    const y = (127 - waveBuf[i]) / 254 * h;   // -128..127 -> 满高
+    if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+function drawRR(){
+  const cv = document.getElementById('rrCanvas');
+  const ctx = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if(!w || !h) return;
+  if(cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)){
+    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  if(!rrBuf.length) return;
+  let max = 0;
+  for(const v of rrBuf) if(v > max) max = v;
+  if(max === 0) max = 1;
+  ctx.fillStyle = '#2ecc71';
+  const n = rrBuf.length;
+  for(let i = 0; i < n; i++){
+    const x = i / (n-1) * w;
+    const y = h - rrBuf[i] / max * h;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
 async function loop(){
   try{
     const d = await getJSON('/api/data');
-    if(!d.ts || d.ts === lastTs) return;   // 同一轮数据不重复追加
-    lastTs = d.ts;
-    document.getElementById('status').textContent =
-      `更新 ${new Date(d.ts*1000).toLocaleTimeString()}`;
-    for(const ch of channels){
-      const v = d.values[ch.key];
-      buf[ch.key].push({t:d.ts, v:(v==null?null:Number(v))});
-      if(buf[ch.key].length > MAX) buf[ch.key].shift();
-      ch.data = buf[ch.key];
+    if(d.ts && d.ts !== lastTs){
+      lastTs = d.ts;
+      document.getElementById('status').textContent =
+        `更新 ${new Date(d.ts*1000).toLocaleTimeString()}`;
+      for(const ch of lines){
+        const v = d.values[ch.key];
+        buf[ch.key].push({t:d.ts, v:(v==null?null:Number(v))});
+        if(buf[ch.key].length > MAX) buf[ch.key].shift();
+        ch.data = buf[ch.key];
+      }
+      for(const ch of lines) drawLine(ch);
     }
-    for(const ch of channels) drawChannel(ch);
+    // 卡片（每轮刷新，无数据则"--"）
+    for(const [k, el] of Object.entries(cards)){
+      el.textContent = fmt(d.values[k]);
+    }
+    // 波形 + RR（有帧数据才追加）
+    const ac = d.wave && d.wave.acdata;
+    if(ac && ac.length){
+      waveBuf.push(...ac);
+      if(waveBuf.length > WAVE_MAX) waveBuf.splice(0, waveBuf.length - WAVE_MAX);
+      const rra = d.wave.rra || [];
+      if(rra.length) rrBuf.push(...rra);
+      if(rrBuf.length > RR_MAX) rrBuf.splice(0, rrBuf.length - RR_MAX);
+      drawWave();
+      drawRR();
+    }
   }catch(e){ /* 服务未就绪时静默重试 */ }
 }
 

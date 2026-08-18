@@ -41,6 +41,8 @@ def collector(interval: float):
             with LOCK:
                 STATE["values"] = values
                 STATE["ts"] = time.time()
+                STATE["acdata"] = vital_cache.get("acdata", [])
+                STATE["rra"] = vital_cache.get("rra", [])
         except Exception as e:
             print(f"采集异常: {e}")
         if interval > 0:
@@ -54,18 +56,24 @@ def index():
 
 @app.route("/api/meta")
 def api_meta():
-    """通道元数据（标题/单位/颜色/布局），前端据此建图"""
+    """通道元数据（折线/卡片/布局），前端据此建图"""
     return jsonify({
-        "curves": {k: {"title": t, "unit": u, "color": c}
-                   for k, (t, u, c) in sensor_acq.CURVES.items()},
-        "placement": sensor_acq.PLACEMENT,
+        "lines": {k: {"title": t, "unit": u, "color": c}
+                  for k, (t, u, c) in sensor_acq.LINE_CHANNELS.items()},
+        "cards": {k: {"title": t, "unit": u}
+                  for k, (t, u) in sensor_acq.CARD_CHANNELS.items()},
+        "vital_cards": {k: {"title": t, "unit": u}
+                        for k, (t, u) in sensor_acq.VITAL_CARD_CHANNELS.items()},
+        "line_placement": sensor_acq.LINE_PLACEMENT,
+        "card_keys": sensor_acq.CARD_KEYS,
     })
 
 
 @app.route("/api/data")
 def api_data():
     with LOCK:
-        return jsonify({"ts": STATE["ts"], "values": STATE["values"]})
+        wave = {"acdata": STATE.get("acdata", []), "rra": STATE.get("rra", [])}
+        return jsonify({"ts": STATE["ts"], "values": STATE["values"], "wave": wave})
 
 
 def main():

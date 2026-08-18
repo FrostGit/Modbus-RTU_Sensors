@@ -310,10 +310,15 @@ def test_vital_signs_packet():
 
 
 def test_sensor_acq_channels():
-    """sensor_acq 通道元数据与采集输出键一致（35 路）"""
+    """sensor_acq 通道元数据：折线19 + 通用卡片5 + 生命体征卡片11 = 35 路"""
     import sensor_acq
-    # 35 路 = 气体4 + 气象6 + 电源4 + 土壤8 + 生命体征13
-    assert len(sensor_acq.CURVES) == 35, len(sensor_acq.CURVES)
+    all_keys = (set(sensor_acq.LINE_CHANNELS)
+                | set(sensor_acq.CARD_CHANNELS)
+                | set(sensor_acq.VITAL_CARD_CHANNELS))
+    assert len(sensor_acq.LINE_CHANNELS) == 19, len(sensor_acq.LINE_CHANNELS)
+    assert len(sensor_acq.CARD_CHANNELS) == 5, len(sensor_acq.CARD_CHANNELS)
+    assert len(sensor_acq.VITAL_CARD_CHANNELS) == 11, len(sensor_acq.VITAL_CARD_CHANNELS)
+    assert len(all_keys) == 35, len(all_keys)
     expected = {
         "smoke", "co2", "o2", "ch4",
         "temperature", "humidity", "dewpoint", "pressure", "altitude", "air_density",
@@ -325,18 +330,22 @@ def test_sensor_acq_channels():
         "cardiac_output", "peripheral_resistance", "rr_variability",
         "sdnn", "rmssd", "nn50", "pnn50",
     }
-    assert set(sensor_acq.CURVES) == expected
-    # 布局中的通道恰好是全部 35 路，无遗漏无重复
-    placed = [k for _, _, k in sensor_acq.PLACEMENT]
-    assert len(placed) == 35
-    assert set(placed) == expected
-    # 生命体征字段与通道一一对应
-    assert set(sensor_acq.VITAL_FIELDS) == expected & {
-        "heart_rate", "spo2", "bk", "fatigue_index",
-        "systolic_pressure", "diastolic_pressure",
-        "cardiac_output", "peripheral_resistance", "rr_variability",
-        "sdnn", "rmssd", "nn50", "pnn50",
-    }
+    assert all_keys == expected
+    # 折线布局恰好 19 路，无遗漏无重复
+    placed = [k for _, _, k in sensor_acq.LINE_PLACEMENT]
+    assert len(placed) == 19
+    assert set(placed) == set(sensor_acq.LINE_CHANNELS)
+    # 卡片行与卡片通道一致
+    assert set(sensor_acq.CARD_KEYS) == set(sensor_acq.CARD_CHANNELS)
+    # 生命体征 13 = 折线(心率/血氧) + 卡片11
+    vital_line = set(sensor_acq.LINE_CHANNELS) & {"heart_rate", "spo2"}
+    assert vital_line == {"heart_rate", "spo2"}
+    assert set(sensor_acq.VITAL_FIELDS) == vital_line | set(sensor_acq.VITAL_CARD_CHANNELS)
+    # 海拔与氮磷钾确实在卡片而非折线
+    assert "altitude" not in sensor_acq.LINE_CHANNELS
+    assert {"soil_nitro", "soil_phosphorus", "soil_potassium"} <= set(sensor_acq.CARD_CHANNELS)
+    # 生命体征其余参数不在本地折线中（仅web卡片）
+    assert set(sensor_acq.VITAL_CARD_CHANNELS).isdisjoint(sensor_acq.LINE_CHANNELS)
 
 
 def main():
