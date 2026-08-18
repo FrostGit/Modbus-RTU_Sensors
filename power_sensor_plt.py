@@ -1,98 +1,82 @@
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib import font_manager
-from power_sensor import PowerSensor
-import time
-from lib_ModbusRTUDevice import ModbusException
-import serial
-from PIL import Image
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""电源传感器实时绘图
 
-my_font = font_manager.FontProperties(fname="./STSONG.TTF")
+- 驱动对象实例化一次、批量读 4 项参数（1 次 Modbus 往返）
+- 每轮曲线同步对齐，单点失败记 None（曲线断口）
+- 横轴为相对时间(秒)，保留最近 WINDOW 个采样点
+"""
+import os
+import time
+from collections import deque
+
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
+
+from lib_ModbusRTUDevice import ModbusException
+from power_sensor import PowerSensor
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WINDOW = 300
+PORT = "/dev/power_sensor"
+
+my_font = font_manager.FontProperties(fname=os.path.join(BASE_DIR, "STSONG.TTF"))
+
+FIELDS = [
+    ("voltage", "电压", "V", "r"),
+    ("current", "电流", "A", "g"),
+    ("power", "功率", "W", "b"),
+    ("energy", "累计电量", "Wh", "y"),
+]
 
 plt.ion()
-
-# 初始化数据列表
-x_data = []
-# 电源类传感器数据
-voltage_data = []
-power_data = []
-current_data = []
-energy_data = []
-
-# 创建子图
 fig, axes = plt.subplots(2, 2, figsize=(20, 12))
-fig.suptitle('多模态数据采集平台-电源类传感器数据', fontsize=16, fontproperties=my_font)
-
-voltage_line, = axes[0, 0].plot([], [], 'r-', linewidth=2)
-axes[0, 0].set_title('电压', fontproperties=my_font)
-# axes[0, 5].set_xlabel('采集次数', fontproperties=my_font)
-axes[0, 0].set_ylabel('V', fontproperties=my_font)
-axes[0, 0].grid(True, alpha=0.3)
-
-power_line, = axes[0, 1].plot([], [], 'g-', linewidth=2)
-axes[0, 1].set_title('功率', fontproperties=my_font)
-# axes[0, 5].set_xlabel('采集次数', fontproperties=my_font)
-axes[0, 1].set_ylabel('W', fontproperties=my_font)
-axes[0, 1].grid(True, alpha=0.3)
-
-current_line, = axes[1, 0].plot([], [], 'b-', linewidth=2)
-axes[1, 0].set_title('电流', fontproperties=my_font)
-# axes[1, 5].set_xlabel('采集次数', fontproperties=my_font)
-axes[1, 0].set_ylabel('A', fontproperties=my_font)
-axes[1, 0].grid(True, alpha=0.3)
-
-energy_line, = axes[1, 1].plot([], [], 'y-', linewidth=2)
-axes[1, 1].set_title('电量', fontproperties=my_font)
-# axes[1, 5].set_xlabel('采集次数', fontproperties=my_font)
-axes[1, 1].set_ylabel('wh', fontproperties=my_font)
-axes[1, 1].grid(True, alpha=0.3)
-
-# 调整子图间距
+fig.suptitle("多模态数据采集平台-电源类传感器数据", fontsize=16, fontproperties=my_font)
 plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-# 模拟数据获取和更新
-x = 0
+lines = {}
+series = {}
+for i, (key, title, unit, color) in enumerate(FIELDS):
+    ax = axes[i // 2, i % 2]
+    line, = ax.plot([], [], color + '-', linewidth=2)
+    ax.set_title(title, fontproperties=my_font)
+    ax.set_ylabel(unit, fontproperties=my_font)
+    ax.grid(True, alpha=0.3)
+    lines[key] = line
+    series[key] = deque(maxlen=WINDOW)
+times = deque(maxlen=WINDOW)
+
+sensor = PowerSensor(serial_port=PORT, baudrate=9600, timeout=1)  # 实例化一次，全程复用
+
+t0 = time.time()
 while True:
-    start_time = time.time()
-
     try:
-        x_data.append(x)
+        now = time.time() - t0
+        try:
+            data = sensor.read_all()
+        except ModbusException as e:
+            print(f"Modbus 读取失败: {e}")
+            data = None
 
-        voltage = PowerSensor("/dev/power_sensor", baudrate=9600, timeout=1).read_voltage()
-        voltage_data.append(voltage)
-        voltage_line.set_data(x_data, voltage_data)
+        times.append(now)  # 每轮只追加一次，所有曲线长度保持一致
+        for key, _, _, _ in FIELDS:
+            series[key].append(data.get(key) if data else None)
+            lines[key].set_data(list(times), list(series[key]))
 
-        current = PowerSensor("/dev/power_sensor", baudrate=9600, timeout=1).read_current()
-        current_data.append(current)
-        current_line.set_data(x_data, current_data)
-
-        power = PowerSensor("/dev/power_sensor", baudrate=9600, timeout=1).read_power()
-        power_data.append(power)
-        power_line.set_data(x_data, power_data)
-
-        energy = PowerSensor("/dev/power_sensor", baudrate=9600, timeout=1).read_energy()
-        energy_data.append(energy)
-        energy_line.set_data(x_data, energy_data)
-
-        # 调整每个子图的坐标轴范围
         for ax in axes.flat:
-            ax.relim()  # 重新计算数据范围
-            ax.autoscale_view()  # 自动调整视图范围
-
-        # 重绘图表
+            ax.relim()
+            ax.autoscale_view()
         fig.canvas.draw()
         fig.canvas.flush_events()
 
-        x = x + 1
-        print(time.time() - start_time)
+        print(f"采样 #{len(times)} t={now:.2f}s")
+        time.sleep(0.05)
 
-    except ModbusException as e:
-        print(f"Modbus Exception: {e}")
-        time.sleep(1)  # 出错时等待1秒再重试
+    except KeyboardInterrupt:
+        print("\n退出")
+        break
     except Exception as e:
         print(f"其他异常: {e}")
         time.sleep(1)
 
-# 保持图表显示（实际上不会执行到这里，因为上面是无限循环）
-plt.ioff()
-plt.show()
+sensor.close()

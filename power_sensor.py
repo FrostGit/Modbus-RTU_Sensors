@@ -94,10 +94,8 @@ class PowerSensor(ModbusRTUDevice):
         response = self.send_request_get_response(frame)
         if len(response) == 9:
             voltage_raw = (response[3] << 24) | (response[4] << 16) | (response[5] << 8) | response[6]
-            print(voltage_raw)
             if voltage_raw >= 0x80000000:  # 处理有符号整数
                 voltage_raw -= 0x100000000
-            print(voltage_raw)
             voltage = voltage_raw / 1000.0 # 数据为mV,转换为实际电压值
             return voltage
         else:
@@ -153,6 +151,31 @@ class PowerSensor(ModbusRTUDevice):
             return energy
         else:
             raise ModbusException("Failed to read energy")
+
+    def read_all(self):
+        """一次批量读取电压/电流/功率/累计电量（4个32位值连续，1次Modbus往返）
+
+        Returns:
+            dict: {"voltage": V, "current": A, "power": W, "energy": Wh}
+        """
+        frame = self.build_read_frame(self.regVoltage, 8)
+        response = self.send_request_get_response(frame)
+        if len(response) != 21:  # 1地址+1功能+1字节数+16数据+2CRC
+            raise ModbusException("Failed to read all power values")
+        fields = [
+            ("voltage", 0.001),  # mV -> V
+            ("current", 0.001),  # mA -> A
+            ("power",   0.001),  # mW -> W
+            ("energy",  0.1),    # 0.1Wh -> Wh
+        ]
+        values = {}
+        for i, (name, scale) in enumerate(fields):
+            raw32 = ((response[3 + i * 4] << 24) | (response[4 + i * 4] << 16) |
+                     (response[5 + i * 4] << 8) | response[6 + i * 4])
+            if raw32 >= 0x80000000:  # 处理有符号整数
+                raw32 -= 0x100000000
+            values[name] = raw32 * scale
+        return values
 
     def read_baudrate(self):
         """读取当前波特率设置
@@ -267,15 +290,17 @@ class PowerSensor(ModbusRTUDevice):
             raise ModbusException("Failed to read voltage level")
         
     def read_coulomb_voltage(self):
-        """读取当前库伦计修正电压设置，单位V
-        
+        """读取当前库伦计修正电压设置
+
         Returns:
-            库伦计修正电压值，32位浮点数，单位V
+            库伦计修正电压原始整数值（缩放关系待设备手册确认）
         """
         frame = self.build_read_frame(self.regCoulombVoltage, 2)
         response = self.send_request_get_response(frame)
         if len(response) == 9:
             coulomb_voltage = (response[3] << 24) | (response[4] << 16) | (response[5] << 8) | response[6]
+            if coulomb_voltage >= 0x80000000:  # 处理有符号整数
+                coulomb_voltage -= 0x100000000
             return coulomb_voltage
         else:
             raise ModbusException("Failed to read coulomb voltage")
@@ -311,10 +336,9 @@ class PowerSensor(ModbusRTUDevice):
         frame.FunctionCode = 0x06  # 写单个寄存器
         frame.StartingAddress_H = (self.regBaudrate >> 8) & 0xFF
         frame.StartingAddress_L = self.regBaudrate & 0xFF
-        frame.Quantity_H = 0x00
-        frame.Quantity_L = baudrate_code
-        request_frame = frame.to_bytes()
-        response = self.send_request_get_response(request_frame)
+        frame.Value_H = 0x00
+        frame.Value_L = baudrate_code
+        response = self.send_request_get_response(frame)
         if len(response) == 8:
             return True
         else:
@@ -329,10 +353,9 @@ class PowerSensor(ModbusRTUDevice):
         frame.FunctionCode = 0x06  # 写单个寄存器
         frame.StartingAddress_H = (self.regAddress >> 8) & 0xFF
         frame.StartingAddress_L = self.regAddress & 0xFF
-        frame.Quantity_H = 0x00
-        frame.Quantity_L = new_address
-        request_frame = frame.to_bytes()
-        response = self.send_request_get_response(request_frame)
+        frame.Value_H = 0x00
+        frame.Value_L = new_address
+        response = self.send_request_get_response(frame)
         if len(response) == 8:
             self.address = new_address  # 更新当前设备地址
             return True
@@ -346,10 +369,9 @@ class PowerSensor(ModbusRTUDevice):
         frame.FunctionCode = 0x06  # 写单个寄存器
         frame.StartingAddress_H = (self.regClearEnergy >> 8) & 0xFF
         frame.StartingAddress_L = self.regClearEnergy & 0xFF
-        frame.Quantity_H = 0x12
-        frame.Quantity_L = 0x34
-        request_frame = frame.to_bytes()
-        response = self.send_request_get_response(request_frame)
+        frame.Value_H = 0x12
+        frame.Value_L = 0x34
+        response = self.send_request_get_response(frame)
         if len(response) == 8:
             return True
         else:
@@ -369,10 +391,9 @@ class PowerSensor(ModbusRTUDevice):
         frame.FunctionCode = 0x06  # 写单个寄存器
         frame.StartingAddress_H = (self.regUnits >> 8) & 0xFF
         frame.StartingAddress_L = self.regUnits & 0xFF
-        frame.Quantity_H = 0x00
-        frame.Quantity_L = units_code
-        request_frame = frame.to_bytes()
-        response = self.send_request_get_response(request_frame)
+        frame.Value_H = 0x00
+        frame.Value_L = units_code
+        response = self.send_request_get_response(frame)
         if len(response) == 8:
             self.unit = units_code  # 更新当前单位设置
             return True
@@ -388,10 +409,9 @@ class PowerSensor(ModbusRTUDevice):
         frame.FunctionCode = 0x06  # 写单个寄存器
         frame.StartingAddress_H = (self.regSampleRate >> 8) & 0xFF
         frame.StartingAddress_L = self.regSampleRate & 0xFF
-        frame.Quantity_H = 0x00
-        frame.Quantity_L = sample_rate
-        request_frame = frame.to_bytes()
-        response = self.send_request_get_response(request_frame)
+        frame.Value_H = 0x00
+        frame.Value_L = sample_rate
+        response = self.send_request_get_response(frame)
         if len(response) == 8:
             return True
         else:
@@ -411,10 +431,9 @@ class PowerSensor(ModbusRTUDevice):
         frame.FunctionCode = 0x06  # 写单个寄存器
         frame.StartingAddress_H = (self.regEnergyAccMode >> 8) & 0xFF
         frame.StartingAddress_L = self.regEnergyAccMode & 0xFF
-        frame.Quantity_H = 0x00
-        frame.Quantity_L = mode_code
-        request_frame = frame.to_bytes()
-        response = self.send_request_get_response(request_frame)
+        frame.Value_H = 0x00
+        frame.Value_L = mode_code
+        response = self.send_request_get_response(frame)
         if len(response) == 8:
             return True
         else:
@@ -435,10 +454,9 @@ class PowerSensor(ModbusRTUDevice):
         frame.StartingAddress_H = (self.regCoulombVoltage >> 8) & 0xFF
         frame.StartingAddress_L = self.regCoulombVoltage & 0xFF
         voltage_int = int(voltage)
-        frame.Quantity_H = (voltage_int >> 8) & 0xFF
-        frame.Quantity_L = voltage_int & 0xFF
-        request_frame = frame.to_bytes()
-        response = self.send_request_get_response(request_frame)
+        frame.Value_H = (voltage_int >> 8) & 0xFF
+        frame.Value_L = voltage_int & 0xFF
+        response = self.send_request_get_response(frame)
         if len(response) == 8:
             return True
         else:

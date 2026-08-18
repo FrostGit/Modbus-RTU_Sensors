@@ -1,0 +1,5 @@
+pyserial
+numpy
+matplotlib
+Pillow
+# crcmod 可选：缺失时 lib_ModbusRTUDevice.py 自动注入纯 Python CRC16 实现

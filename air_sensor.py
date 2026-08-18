@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import time
 from lib_ModbusRTUDevice import ModbusRTUDevice, ModbusRTU_Frame, ModbusException
 """HAT_R4A 系列气象检测传感器驱动文件
 
@@ -398,47 +397,49 @@ class Modbus_Air_Sensor(ModbusRTUDevice):
         frame.Value_L = self.CMD_REBOOT_DEVICE & 0xFF
         
         self.send_request_get_response(frame)
+    
+    def read_all(self):
+        """一次批量读取全部6项气象参数（0x0000-0x0005连续，1次Modbus往返）
+
+        Returns:
+            dict: {"temperature": ℃, "humidity": %, "dewpoint": ℃,
+                   "pressure": hPa, "altitude": m, "air_density": Kg/m³}
+        """
+        frame = self.build_read_frame(starting_address=0x0000, quantity=6)
+        response = self.send_request_get_response(frame)
+        fields = [
+            ("temperature", 0.01),
+            ("humidity",    0.01),
+            ("dewpoint",    0.01),
+            ("pressure",    0.1),
+            ("altitude",    0.2),
+            ("air_density", 0.01),
+        ]
+        values = {}
+        for i, (name, scale) in enumerate(fields):
+            raw = (response[3 + i * 2] << 8) | response[4 + i * 2]
+            # 处理补码 直接无符号转有符号
+            values[name] = ((raw ^ 0x8000) - 0x8000) * scale
+        return values
         
 if __name__ == "__main__":
     weather_sensor_port = "/dev/weather_sensor"
 
     while True:
         air_sensor = Modbus_Air_Sensor(serial_port=weather_sensor_port)
-        delay_time = 0.05   #  该延迟时间经十轮测试可稳定读取所有数据，未测试更低延迟时间，有特殊需求可尝试
-        
-        print(f"Air temperature {air_sensor.read_temperature()}")
-        time.sleep(delay_time)
-        print(f"Air humidity {air_sensor.read_humidity()}")
-        time.sleep(delay_time)
-        print(f"Dew Point {air_sensor.read_dewPoint()}")
-        time.sleep(delay_time)
-        print(f"Air Pressure {air_sensor.read_airPressure()}")
-        time.sleep(delay_time)
-        print(f"Altitude {air_sensor.read_altitude()}")
-        time.sleep(delay_time)
-        print(f"Air Density {air_sensor.read_airDensity()}")
-        time.sleep(delay_time)
-        print(f"Error Flag {air_sensor.read_errorFlag()}")
-        time.sleep(delay_time)
-        print("-----Historical Max/Min Values-----")
-        time.sleep(delay_time)
-        print(f"Air Temperature Max/Min: {air_sensor.readAirTempMaxMin()}")
-        time.sleep(delay_time)
-        print(f"Air Humidity Max/Min: {air_sensor.readAirHumiMaxMin()}")
-        time.sleep(delay_time)
-        print(f"Dew Point Max/Min: {air_sensor.readDewPointMaxMin()}")
-        time.sleep(delay_time)
-        print(f"Air Pressure Max/Min: {air_sensor.readAirPressMaxMin()}")
-        time.sleep(delay_time)
-        print(f"Altitude Max/Min: {air_sensor.readAltitudeMaxMin()}")
-        time.sleep(delay_time)
-        print(f"Air Density Max/Min: {air_sensor.readAirDensityMaxMin()}")
-        time.sleep(delay_time)
-        print(f"Power On Counts: {air_sensor.readPowerOnCounts()}")
-        time.sleep(delay_time)
-        print(f"Power On Hours: {air_sensor.readPowerOnHours()}")
-        time.sleep(delay_time)
-        print(f"Error History: {air_sensor.readErrorHistory()}")
-        time.sleep(delay_time) 
-        
+        try:
+            for name, value in air_sensor.read_all().items():
+                print(f"{name}: {value}")
+            print("-----Historical Max/Min Values-----")
+            print(f"Air Temperature Max/Min: {air_sensor.readAirTempMaxMin()}")
+            print(f"Air Humidity Max/Min: {air_sensor.readAirHumiMaxMin()}")
+            print(f"Dew Point Max/Min: {air_sensor.readDewPointMaxMin()}")
+            print(f"Air Pressure Max/Min: {air_sensor.readAirPressMaxMin()}")
+            print(f"Altitude Max/Min: {air_sensor.readAltitudeMaxMin()}")
+            print(f"Air Density Max/Min: {air_sensor.readAirDensityMaxMin()}")
+            print(f"Power On Counts: {air_sensor.readPowerOnCounts()}")
+            print(f"Power On Hours: {air_sensor.readPowerOnHours()}")
+            print(f"Error History: {air_sensor.readErrorHistory()}")
+        except ModbusException as e:
+            print(f"Modbus Exception: {e}")
         break

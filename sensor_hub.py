@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import time
 from lib_ModbusRTUDevice import ModbusRTUDevice, ModbusRTU_Frame, ModbusException
 """
 气体传感器485 Modbus-RTU协议通信底层库
@@ -28,11 +27,13 @@ class GasSensor:
         """
         self.sensor_type = sensor_type
         self.address = address
+        # 传感器地址（与文件头部注释、lib_ModbusRTUDevice 保持一致）：
+        # 烟雾 0x02 / CO2 0x03 / 氧气 0x04 / 甲烷 0x05
         self.sensor_address_map = {
             "smoke_sensor": 0x02,
             "co2_sensor": 0x03,
-            "ch4_sensor": 0x04,
-            "o2_sensor": 0x05
+            "o2_sensor": 0x04,
+            "ch4_sensor": 0x05
         }
         if sensor_type in self.sensor_address_map:
             self.address = self.sensor_address_map[sensor_type]
@@ -109,8 +110,9 @@ class Modbus_Sensor_Hub(ModbusRTUDevice):
         frame = ModbusRTU_Frame()
         frame.AddressCode = 0xFE  # 广播地址
         frame.FunctionCode = 0x03  # 读保持寄存器
-        frame.StartingAddress_H = (self.regAddress >> 8) & 0xFF
-        frame.StartingAddress_L = self.regAddress & 0xFF
+        # 设备地址寄存器地址定义在 GasSensor 上（0x07D0），HUB 本身无该属性
+        frame.StartingAddress_H = (self.sensorSmoke.regAddress >> 8) & 0xFF
+        frame.StartingAddress_L = self.sensorSmoke.regAddress & 0xFF
         frame.Quantity_H = 0x00
         frame.Quantity_L = 0x01
 
@@ -173,7 +175,7 @@ class Modbus_Sensor_Hub(ModbusRTUDevice):
         """读取O2浓度信息并返回
 
         Returns:
-            float: O2浓度值（ppm）
+            float: O2浓度值（%VOL）
         """
         frame = self.build_read_frame(starting_address=self.sensorO2.regGasConcentration,address=self.sensorO2.address)
         response = self.send_request_get_response(frame)
@@ -186,7 +188,7 @@ class Modbus_Sensor_Hub(ModbusRTUDevice):
         """读取CH4浓度信息并返回
 
         Returns:
-            float: CH4浓度值（ppm）
+            float: CH4浓度值（%LEL）
         """
         frame = self.build_read_frame(starting_address=self.sensorCH4.regGasConcentration,address=self.sensorCH4.address)
         response = self.send_request_get_response(frame)
@@ -195,24 +197,27 @@ class Modbus_Sensor_Hub(ModbusRTUDevice):
         raw_data = raw_data * self.sensorCH4.factor
         return raw_data
 
+    def read_all(self):
+        """一次读取全部4种气体浓度（4个从站地址不同，需4次串行往返）
+
+        Returns:
+            dict: {"smoke": ppm, "co2": ppm, "o2": %VOL, "ch4": %LEL}
+        """
+        return {
+            "smoke": self.read_smokeGasConcentration(),
+            "co2": self.read_co2GasConcentration(),
+            "o2": self.read_o2GasConcentration(),
+            "ch4": self.read_ch4GasConcentration(),
+        }
+
 if __name__ == "__main__":
     gas_hub_port = "/dev/gas_hub"
 
     while True:
         sensor_hub = Modbus_Sensor_Hub(serial_port=gas_hub_port)
         try:
-            smoke_concentration = sensor_hub.read_smokeGasConcentration()
-            print(f"Smoke Gas Concentration : {smoke_concentration} {sensor_hub.get_sensor_unit('smoke_sensor')}")
-            time.sleep(0.1)
-            co2_concentration = sensor_hub.read_co2GasConcentration()
-            print(f"CO2 Gas Concentration: {co2_concentration} {sensor_hub.get_sensor_unit('co2_sensor')}")
-            time.sleep(0.1)
-            o2_concentration = sensor_hub.read_o2GasConcentration()
-            print(f"O2 Gas Concentration: {o2_concentration} {sensor_hub.get_sensor_unit('o2_sensor')}")
-            time.sleep(0.1)
-            ch4_concentration = sensor_hub.read_ch4GasConcentration()
-            print(f"CH4 Gas Concentration: {ch4_concentration} {sensor_hub.get_sensor_unit('ch4_sensor')}")
-            time.sleep(0.1)
+            for name, value in sensor_hub.read_all().items():
+                print(f"{name:6s} Gas Concentration: {value} {sensor_hub.get_sensor_unit(name + '_sensor')}")
         except ModbusException as e:
             print(f"Modbus Exception: {e}")
         break

@@ -1,123 +1,151 @@
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib import font_manager
-from air_sensor import Modbus_Air_Sensor
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""空气（气象）传感器离线数据记录
+
+实时采集 6 项气象参数并写入 CSV（含时间戳），同时实时绘图展示。
+
+用法:
+    python3 air_sensor_record.py                # 默认每 1 秒采一次
+    python3 air_sensor_record.py --interval 2   # 每 2 秒采一次
+    python3 air_sensor_record.py --out /tmp/air.csv
+
+Ctrl+C 停止，自动关闭文件并打印统计。
+"""
+import argparse
+import csv
+import os
+import sys
 import time
+from collections import deque
+from datetime import datetime
+
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
+
+from air_sensor import Modbus_Air_Sensor
 from lib_ModbusRTUDevice import ModbusException
-import serial
-from PIL import Image
 
-my_font = font_manager.FontProperties(fname="./STSONG.TTF")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WINDOW = 600  # 绘图保留最近 600 个采样点
+FIELDS = ["temperature", "humidity", "dewpoint", "pressure", "altitude", "air_density"]
 
-plt.ion()
-
-# 初始化数据列表
-x_data = []
-# 天气类传感器数据
-air_temperature_data = []
-air_humidity_data = []
-dewPoint_data = []
-airPressure_data = []
-altitude_data = []
-airDensity_data = []
-
-# 创建子图
-fig, axes = plt.subplots(2, 3, figsize=(20, 12))
-fig.suptitle('多模态数据采集平台-天气类传感器数据', fontsize=16, fontproperties=my_font)
-
-# 第一行第5、6个：空气温度和湿度 (0,4) - (0,5)
-air_temperature_line, = axes[0, 0].plot([], [], 'r-', linewidth=2)
-axes[0, 0].set_title('空气温度', fontproperties=my_font)
-# axes[0, 4].set_xlabel('采集次数', fontproperties=my_font)
-axes[0, 0].set_ylabel('℃', fontproperties=my_font)
-axes[0, 0].grid(True, alpha=0.3)
-
-air_humidity_line, = axes[0, 1].plot([], [], 'g-', linewidth=2)
-axes[0, 1].set_title('空气湿度', fontproperties=my_font)
-# axes[0, 5].set_xlabel('采集次数', fontproperties=my_font)
-axes[0, 1].set_ylabel('%', fontproperties=my_font)
-axes[0, 1].grid(True, alpha=0.3)
-
-dewPoint_line, = axes[0, 2].plot([], [], 'b-', linewidth=2)
-axes[0, 2].set_title('露点温度', fontproperties=my_font)
-# axes[1, 0].set_xlabel('采集次数', fontproperties=my_font)
-axes[0, 2].set_ylabel('℃', fontproperties=my_font)
-axes[0, 2].grid(True, alpha=0.3)
-
-airPressure_line, = axes[1, 0].plot([], [], 'y-', linewidth=2)
-axes[1, 0].set_title('大气压力', fontproperties=my_font)
-# axes[1, 1].set_xlabel('采集次数', fontproperties=my_font)
-axes[1, 0].set_ylabel('hPa', fontproperties=my_font)
-axes[1, 0].grid(True, alpha=0.3)
-
-altitude_line, = axes[1, 1].plot([], [], 'c-', linewidth=2)
-axes[1, 1].set_title('海拔高度', fontproperties=my_font)
-# axes[1, 2].set_xlabel('采集次数', fontproperties=my_font)
-axes[1, 1].set_ylabel('m', fontproperties=my_font)
-axes[1, 1].grid(True, alpha=0.3)
-
-airDensity_line, = axes[1, 2].plot([], [], 'm-', linewidth=2)
-axes[1, 2].set_title('空气密度', fontproperties=my_font)
-# axes[1, 3].set_xlabel('采集次数', fontproperties=my_font)
-axes[1, 2].set_ylabel('Kg/m³', fontproperties=my_font)
-axes[1, 2].grid(True, alpha=0.3)
+my_font = font_manager.FontProperties(fname=os.path.join(BASE_DIR, "STSONG.TTF"))
 
 
-# 调整子图间距
-plt.tight_layout(rect=[0, 0, 1, 0.96])
+def parse_args():
+    parser = argparse.ArgumentParser(description="气象传感器离线数据记录 (CSV)")
+    parser.add_argument("--serial-port", default="/dev/weather_sensor",
+                        help="串口路径 (默认 /dev/weather_sensor)")
+    parser.add_argument("--interval", type=float, default=1.0,
+                        help="采样间隔秒数 (默认 1.0)")
+    parser.add_argument("--out", default=None,
+                        help="CSV 输出路径 (默认 data/air_sensor_<时间戳>.csv)")
+    return parser.parse_args()
 
-# 模拟数据获取和更新
-x = 0
-while True:
-    start_time = time.time()
 
+def default_out_path():
+    data_dir = os.path.join(BASE_DIR, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return os.path.join(data_dir, f"air_sensor_{ts}.csv")
+
+
+def build_figure():
+    """2x3 实时绘图面板，返回 (fig, axes, lines, series, times)"""
+    plt.ion()
+    fig, axes = plt.subplots(2, 3, figsize=(20, 12))
+    fig.suptitle("多模态数据采集平台-天气类传感器数据", fontsize=16, fontproperties=my_font)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    titles = {
+        "temperature": ("空气温度", "℃"),
+        "humidity": ("空气湿度", "%"),
+        "dewpoint": ("露点温度", "℃"),
+        "pressure": ("大气压力", "hPa"),
+        "altitude": ("海拔高度", "m"),
+        "air_density": ("空气密度", "Kg/m³"),
+    }
+    lines = {}
+    series = {f: deque(maxlen=WINDOW) for f in FIELDS}
+    times = deque(maxlen=WINDOW)
+    for i, field in enumerate(FIELDS):
+        ax = axes[i // 3, i % 3]
+        title, unit = titles[field]
+        line, = ax.plot([], [], '-', linewidth=2)
+        ax.set_title(title, fontproperties=my_font)
+        ax.set_ylabel(unit, fontproperties=my_font)
+        ax.grid(True, alpha=0.3)
+        lines[field] = line
+    return fig, axes, lines, series, times
+
+
+def main():
+    args = parse_args()
+    out_path = args.out or default_out_path()
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    sensor = Modbus_Air_Sensor(serial_port=args.serial_port)
+    fig, axes, lines, series, times = build_figure()
+
+    t0 = time.time()
+    rows = 0
+    fail_count = 0
+
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["ts"] + FIELDS)
+        writer.writeheader()
+
+        print(f"开始记录 -> {out_path} (间隔 {args.interval}s, Ctrl+C 停止)")
+        while True:
+            try:
+                now = time.time() - t0
+                try:
+                    data = sensor.read_all()  # 一次 Modbus 往返读全部 6 项
+                except ModbusException as e:
+                    print(f"Modbus 读取失败: {e}")
+                    fail_count += 1
+                    time.sleep(args.interval)
+                    continue
+
+                ts = datetime.now().isoformat(timespec="milliseconds")
+                row = {"ts": ts, **{f: round(data.get(f), 3) for f in FIELDS}}
+                writer.writerow(row)
+                f.flush()  # 实时落盘，掉电/中断不丢数据
+                rows += 1
+
+                # 实时绘图（每轮追加一次时间戳，长度对齐）
+                times.append(now)
+                for field in FIELDS:
+                    series[field].append(row[field])
+                    lines[field].set_data(list(times), list(series[field]))
+                for ax in axes.flat:
+                    ax.relim()
+                    ax.autoscale_view()
+                fig.canvas.draw()
+                fig.canvas.flush_events()
+
+                print(f"[{rows:6d}] t={now:7.1f}s " +
+                      ", ".join(f"{f}={row[f]}" for f in FIELDS))
+
+            except KeyboardInterrupt:
+                print("\n停止记录")
+                break
+            except Exception as e:
+                print(f"其他异常: {e}")
+                fail_count += 1
+                time.sleep(1)
+
+            time.sleep(args.interval)
+
+    sensor.close()
+    duration = time.time() - t0
+    print(f"\n完成: 共 {rows} 行, 用时 {duration:.1f}s, 失败 {fail_count} 次")
+    print(f"输出文件: {out_path}")
+
+
+if __name__ == "__main__":
     try:
-        x_data.append(x)
-
-        # 获取空气传感器数据
-        air_temperature = Modbus_Air_Sensor(serial_port="/dev/weather_sensor").read_temperature()
-        air_temperature_data.append(air_temperature)
-        air_temperature_line.set_data(x_data, air_temperature_data)
-
-        air_humidity = Modbus_Air_Sensor(serial_port="/dev/weather_sensor").read_humidity()
-        air_humidity_data.append(air_humidity)
-        air_humidity_line.set_data(x_data, air_humidity_data)
-
-        dewPoint_value = Modbus_Air_Sensor(serial_port="/dev/weather_sensor").read_dewPoint()
-        dewPoint_data.append(dewPoint_value)
-        dewPoint_line.set_data(x_data, dewPoint_data)
-
-        airPressure_value = Modbus_Air_Sensor(serial_port="/dev/weather_sensor").read_airPressure()
-        airPressure_data.append(airPressure_value)
-        airPressure_line.set_data(x_data, airPressure_data)
-
-        altitude_value = Modbus_Air_Sensor(serial_port="/dev/weather_sensor").read_altitude()
-        altitude_data.append(altitude_value)
-        altitude_line.set_data(x_data, altitude_data)
-
-        airDensity_value = Modbus_Air_Sensor(serial_port="/dev/weather_sensor").read_airDensity()
-        airDensity_data.append(airDensity_value)
-        airDensity_line.set_data(x_data, airDensity_data)
-
-        # 调整每个子图的坐标轴范围
-        for ax in axes.flat:
-            ax.relim()  # 重新计算数据范围
-            ax.autoscale_view()  # 自动调整视图范围
-
-        # 重绘图表
-        fig.canvas.draw()
-        fig.canvas.flush_events()
-
-        x = x + 1
-        print(time.time() - start_time)
-
-    except ModbusException as e:
-        print(f"Modbus Exception: {e}")
-        time.sleep(1)  # 出错时等待1秒再重试
+        main()
     except Exception as e:
-        print(f"其他异常: {e}")
-        time.sleep(1)
-
-# 保持图表显示（实际上不会执行到这里，因为上面是无限循环）
-plt.ioff()
-plt.show()
+        print(f"初始化失败: {e}")
+        sys.exit(1)

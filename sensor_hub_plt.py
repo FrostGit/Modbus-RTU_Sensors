@@ -1,99 +1,82 @@
-import matplotlib.pyplot as plt
-import numpy as np
-from matplotlib import font_manager
-from sensor_hub import Modbus_Sensor_Hub
-import time
-from lib_ModbusRTUDevice import ModbusException
-import serial
-from PIL import Image
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""气体传感器 HUB 实时绘图
 
-my_font = font_manager.FontProperties(fname="./STSONG.TTF")
+- 驱动对象实例化一次，4 个从站地址不同需 4 次串行往返
+- 每轮曲线同步对齐，单点失败记 None（曲线断口）
+- 横轴为相对时间(秒)，保留最近 WINDOW 个采样点
+"""
+import os
+import time
+from collections import deque
+
+import matplotlib.pyplot as plt
+from matplotlib import font_manager
+
+from lib_ModbusRTUDevice import ModbusException
+from sensor_hub import Modbus_Sensor_Hub
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WINDOW = 300
+PORT = "/dev/gas_hub"
+
+my_font = font_manager.FontProperties(fname=os.path.join(BASE_DIR, "STSONG.TTF"))
+
+FIELDS = [
+    ("smoke", "烟雾传感器", "ppm", "r"),
+    ("co2", "二氧化碳传感器", "ppm", "g"),
+    ("o2", "氧气传感器", "%VOL", "b"),
+    ("ch4", "甲烷传感器", "%LEL", "y"),
+]
 
 plt.ion()
-
-# 初始化数据列表
-x_data = []
-# 气体类传感器数据
-smoke_concentration_data = []
-co2_concentration_data = []
-o2_concentration_data = []
-ch4_concentration_data = []
-
-# 创建子图
 fig, axes = plt.subplots(2, 2, figsize=(20, 12))
-fig.suptitle('多模态数据采集平台-气体类传感器数据', fontsize=16, fontproperties=my_font)
-
-smoke_concentration_line, = axes[0, 0].plot([], [], 'r-', linewidth=2)
-axes[0, 0].set_title('烟雾传感器', fontproperties=my_font)
-# axes[0, 0].set_xlabel('采集次数', fontproperties=my_font)
-axes[0, 0].set_ylabel('ppm', fontproperties=my_font)
-axes[0, 0].grid(True, alpha=0.3)
-
-co2_concentration_line, = axes[0, 1].plot([], [], 'g-', linewidth=2)
-axes[0, 1].set_title('二氧化碳传感器', fontproperties=my_font)
-# axes[0, 1].set_xlabel('采集次数', fontproperties=my_font)
-axes[0, 1].set_ylabel('ppm', fontproperties=my_font)
-axes[0, 1].grid(True, alpha=0.3)
-
-o2_concentration_line, = axes[1, 0].plot([], [], 'b-', linewidth=2)
-axes[1, 0].set_title('氧气传感器', fontproperties=my_font)
-# axes[0, 2].set_xlabel('采集次数', fontproperties=my_font)
-axes[1, 0].set_ylabel('%VOL', fontproperties=my_font)
-axes[1, 0].grid(True, alpha=0.3)
-
-ch4_concentration_line, = axes[1, 1].plot([], [], 'y-', linewidth=2)
-axes[1, 1].set_title('甲烷传感器', fontproperties=my_font)
-# axes[0, 3].set_xlabel('采集次数', fontproperties=my_font)
-axes[1, 1].set_ylabel('%LEL', fontproperties=my_font)
-axes[1, 1].grid(True, alpha=0.3)
-
-# 调整子图间距
+fig.suptitle("多模态数据采集平台-气体类传感器数据", fontsize=16, fontproperties=my_font)
 plt.tight_layout(rect=[0, 0, 1, 0.96])
 
-# 模拟数据获取和更新
-x = 0
+lines = {}
+series = {}
+for i, (key, title, unit, color) in enumerate(FIELDS):
+    ax = axes[i // 2, i % 2]
+    line, = ax.plot([], [], color + '-', linewidth=2)
+    ax.set_title(title, fontproperties=my_font)
+    ax.set_ylabel(unit, fontproperties=my_font)
+    ax.grid(True, alpha=0.3)
+    lines[key] = line
+    series[key] = deque(maxlen=WINDOW)
+times = deque(maxlen=WINDOW)
+
+sensor = Modbus_Sensor_Hub(serial_port=PORT)  # 实例化一次，全程复用
+
+t0 = time.time()
 while True:
-    start_time = time.time()
-
     try:
-        x_data.append(x)
+        now = time.time() - t0
+        try:
+            data = sensor.read_all()
+        except ModbusException as e:
+            print(f"Modbus 读取失败: {e}")
+            data = None
 
-        # 获取气体传感器数据
-        smoke_concentration = Modbus_Sensor_Hub(serial_port="/dev/gas_hub").read_smokeGasConcentration()
-        smoke_concentration_data.append(smoke_concentration)
-        smoke_concentration_line.set_data(x_data, smoke_concentration_data)
+        times.append(now)  # 每轮只追加一次，所有曲线长度保持一致
+        for key, _, _, _ in FIELDS:
+            series[key].append(data.get(key) if data else None)
+            lines[key].set_data(list(times), list(series[key]))
 
-        co2_concentration = Modbus_Sensor_Hub(serial_port="/dev/gas_hub").read_co2GasConcentration()
-        co2_concentration_data.append(co2_concentration)
-        co2_concentration_line.set_data(x_data, co2_concentration_data)
-
-        o2_concentration = Modbus_Sensor_Hub(serial_port="/dev/gas_hub").read_o2GasConcentration()
-        o2_concentration_data.append(o2_concentration)
-        o2_concentration_line.set_data(x_data, o2_concentration_data)
-
-        ch4_concentration = Modbus_Sensor_Hub(serial_port="/dev/gas_hub").read_ch4GasConcentration()
-        ch4_concentration_data.append(ch4_concentration)
-        ch4_concentration_line.set_data(x_data, ch4_concentration_data)
-
-        # 调整每个子图的坐标轴范围
         for ax in axes.flat:
-            ax.relim()  # 重新计算数据范围
-            ax.autoscale_view()  # 自动调整视图范围
-
-        # 重绘图表
+            ax.relim()
+            ax.autoscale_view()
         fig.canvas.draw()
         fig.canvas.flush_events()
 
-        x = x + 1
-        print(time.time() - start_time)
+        print(f"采样 #{len(times)} t={now:.2f}s")
+        time.sleep(0.05)
 
-    except ModbusException as e:
-        print(f"Modbus Exception: {e}")
-        time.sleep(1)  # 出错时等待1秒再重试
+    except KeyboardInterrupt:
+        print("\n退出")
+        break
     except Exception as e:
         print(f"其他异常: {e}")
         time.sleep(1)
 
-# 保持图表显示（实际上不会执行到这里，因为上面是无限循环）
-plt.ioff()
-plt.show()
+sensor.close()

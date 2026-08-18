@@ -212,3 +212,5 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# 传感器离线记录输出
+/data/

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import time
 from lib_ModbusRTUDevice import ModbusRTUDevice, ModbusRTU_Frame, ModbusException
 
 
@@ -168,6 +167,33 @@ class Modbus_Soil_Sensor(ModbusRTUDevice):
         raw_data = (response[3] << 8) | response[4]
         return (float)(raw_data / 100.0)
     
+    def read_all(self):
+        """一次批量读取全部8项土壤参数（0x0000-0x0007连续，1次Modbus往返）
+
+        Returns:
+            dict: {"soil_temp": ℃, "soil_moisture": %, "soil_ec": us/cm,
+                   "soil_salty": mg/L, "soil_nitro": mg/kg, "soil_phosphorus": mg/kg,
+                   "soil_potassium": mg/kg, "soil_ph": pH}
+        """
+        frame = self.build_read_frame(starting_address=0x0000, quantity=8)
+        response = self.send_request_get_response(frame)
+        fields = [
+            ("soil_temp",       10.0, True),   # (名称, 除数, 有符号)
+            ("soil_moisture",   10.0, False),
+            ("soil_ec",          1.0, False),
+            ("soil_salty",       1.0, False),
+            ("soil_nitro",       1.0, False),
+            ("soil_phosphorus",  1.0, False),
+            ("soil_potassium",   1.0, False),
+            ("soil_ph",        100.0, False),
+        ]
+        values = {}
+        for i, (name, div, signed) in enumerate(fields):
+            raw = (response[3 + i * 2] << 8) | response[4 + i * 2]
+            val = (((raw ^ 0x8000) - 0x8000) if signed else raw) / div
+            values[name] = val
+        return values
+    
     def read_address(self):
         """读取设备地址并返回
 
@@ -241,8 +267,8 @@ class Modbus_Soil_Sensor(ModbusRTUDevice):
         frame.FunctionCode = 0x06  # 写单个寄存器
         frame.StartingAddress_H = (self.regAddress >> 8) & 0xFF
         frame.StartingAddress_L = self.regAddress & 0xFF
-        frame.Quantity_H = (new_address >> 8) & 0xFF
-        frame.Quantity_L = new_address & 0xFF
+        frame.Value_H = (new_address >> 8) & 0xFF
+        frame.Value_L = new_address & 0xFF
         
         response = self.send_request_get_response(frame)
         # 验证响应是否正确
@@ -283,8 +309,8 @@ class Modbus_Soil_Sensor(ModbusRTUDevice):
         frame.FunctionCode = 0x06  # 写单个寄存器
         frame.StartingAddress_H = (self.regBaudrate >> 8) & 0xFF
         frame.StartingAddress_L = self.regBaudrate & 0xFF
-        frame.Quantity_H = (baudrate_code >> 8) & 0xFF
-        frame.Quantity_L = baudrate_code & 0xFF
+        frame.Value_H = (baudrate_code >> 8) & 0xFF
+        frame.Value_L = baudrate_code & 0xFF
         
         response = self.send_request_get_response(frame)
         # 验证响应是否正确
@@ -314,8 +340,8 @@ class Modbus_Soil_Sensor(ModbusRTUDevice):
         frame.FunctionCode = 0x06  # 写单个寄存器
         frame.StartingAddress_H = (self.regParity >> 8) & 0xFF
         frame.StartingAddress_L = self.regParity & 0xFF
-        frame.Quantity_H = (new_parity >> 8) & 0xFF
-        frame.Quantity_L = new_parity & 0xFF
+        frame.Value_H = 0x00
+        frame.Value_L = new_parity
         
         response = self.send_request_get_response(frame)
         # 验证响应是否正确
@@ -345,8 +371,8 @@ class Modbus_Soil_Sensor(ModbusRTUDevice):
         frame.FunctionCode = 0x06  # 写单个寄存器
         frame.StartingAddress_H = (self.regAutoReport >> 8) & 0xFF
         frame.StartingAddress_L = self.regAutoReport & 0xFF
-        frame.Quantity_H = (interval_seconds >> 8) & 0xFF
-        frame.Quantity_L = interval_seconds & 0xFF
+        frame.Value_H = (interval_seconds >> 8) & 0xFF
+        frame.Value_L = interval_seconds & 0xFF
         
         response = self.send_request_get_response(frame)
         # 验证响应是否正确
@@ -367,26 +393,11 @@ if __name__ == "__main__":
 
     while True:
         soil_sensor = Modbus_Soil_Sensor(serial_port=soil_sensor_port)
-        delay_time = 0.12   # 测试出来的最稳定的通信间隔
-        
-        print(f"device address 0x{soil_sensor.read_address():02X}")
-        time.sleep(delay_time)
-        print(f"device baudrate {soil_sensor.read_baudrate()}")
-        time.sleep(delay_time)
-        print(f"Temperature {soil_sensor.read_temperature()} °C")
-        time.sleep(delay_time)
-        print(f"Humidity {soil_sensor.read_humi()} %")
-        time.sleep(delay_time)
-        print(f"EC {soil_sensor.read_EC()} us/cm")
-        time.sleep(delay_time)
-        print(f"Salty {soil_sensor.read_salty()} mg/L")
-        time.sleep(delay_time)
-        print(f"Nitro {soil_sensor.read_nitro()} mg/kg")
-        time.sleep(delay_time)
-        print(f"phosphorus {soil_sensor.read_phosphorus()} mg/kg")
-        time.sleep(delay_time)
-        print(f"potassium {soil_sensor.read_potassium()} mg/kg")
-        time.sleep(delay_time)
-        print(f"PH {soil_sensor.read_PH()}")
-        time.sleep(delay_time)
-        # break
+        try:
+            print(f"device address 0x{soil_sensor.read_address():02X}")
+            print(f"device baudrate {soil_sensor.read_baudrate()}")
+            for name, value in soil_sensor.read_all().items():
+                print(f"{name}: {value}")
+        except ModbusException as e:
+            print(f"Modbus Exception: {e}")
+        break
