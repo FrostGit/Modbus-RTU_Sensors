@@ -214,3 +214,4 @@ __marimo__/
 .streamlit/secrets.toml
 # 传感器离线记录输出
 /data/
+.venv-web/
