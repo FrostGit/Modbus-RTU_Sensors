@@ -32,6 +32,7 @@ from soil_sensor import Modbus_Soil_Sensor
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WINDOW = 300  # 保留最近 300 个采样点
+DRAW_EVERY = 2  # 每 N 轮采集才重绘一次图表（采集每轮照常进行，缓解 matplotlib 渲染开销）
 
 my_font = font_manager.FontProperties(fname=os.path.join(BASE_DIR, "STSONG.TTF"))
 
@@ -173,10 +174,12 @@ def main():
 
     vital_cache = {}
     t0 = time.time()
+    round_no = 0
 
     print("开始采集，按 Ctrl+C 退出...")
     while True:
         try:
+            round_no += 1
             now = time.time() - t0
             values = {}
 
@@ -209,9 +212,10 @@ def main():
                     print(f"土壤读取失败: {e}")
 
             # 生命体征：流式主动上报，读不到新包时沿用上次缓存值
+            # 超时只需够检查缓冲区即可(0.05s)，避免每轮干等0.3s
             if sensors.get("vital"):
                 try:
-                    pkt = sensors["vital"].read_packet(timeout_s=0.3)
+                    pkt = sensors["vital"].read_packet(timeout_s=0.05)
                     if pkt:
                         vital_cache = {
                             "heart_rate": pkt.heart_rate,
@@ -238,11 +242,12 @@ def main():
                 series[key].append(values.get(key))  # 缺失记 None，曲线断口
                 lines[key].set_data(list(times), list(series[key]))
 
-            for ax in axes.flat:
-                ax.relim()
-                ax.autoscale_view()
-
-            fig.canvas.draw()
+            # 隔帧重绘：渲染 40 子图开销大，采集每轮进行，显示按 DRAW_EVERY 节流
+            if round_no % DRAW_EVERY == 0:
+                for ax in axes.flat:
+                    ax.relim()
+                    ax.autoscale_view()
+                fig.canvas.draw()
             fig.canvas.flush_events()
 
             print(f"采样 #{len(times)} t={now:.2f}s")
