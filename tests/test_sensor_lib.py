@@ -254,23 +254,24 @@ def test_hub_address_map():
     from sensor_hub import GasSensor
     assert GasSensor("smoke_sensor").address == 0x02
     assert GasSensor("co2_sensor").address == 0x03
-    assert GasSensor("o2_sensor").address == 0x04   # 修正后与注释一致
-    assert GasSensor("ch4_sensor").address == 0x05  # 修正后与注释一致
+    assert GasSensor("ch4_sensor").address == 0x04  # 真机实测：0x04为甲烷
+    assert GasSensor("o2_sensor").address == 0x05    # 真机实测：0x05为氧气
 
 
 def test_hub_read_all():
     from sensor_hub import GasSensor
-    # 4 个从站依次响应: smoke=5ppm, co2=600ppm, o2=20.0%VOL(200*0.1), ch4=1%LEL
+    # read_all 读取顺序: smoke(0x02) -> co2(0x03) -> o2(0x05) -> ch4(0x04)
+    # 响应: smoke=5ppm, co2=600ppm, o2=20.0%VOL(200*0.1), ch4=1%LEL
     responses = []
-    for addr, val in [(0x02, 5), (0x03, 600), (0x04, 200), (0x05, 1)]:
+    for addr, val in [(0x02, 5), (0x03, 600), (0x05, 200), (0x04, 1)]:
         payload = bytes([addr, 0x03, 0x02]) + struct.pack(">H", val)
         responses.append(with_crc(payload))
     dev = make_hub(responses)
     v = dev.read_all()
     assert v == {"smoke": 5, "co2": 600, "o2": 20.0, "ch4": 1}
-    # 发送帧的地址应与修正后的映射一致
+    # 发送帧的地址应与实测映射一致
     sent = dev.serial_port.written
-    assert [s[0] for s in sent] == [0x02, 0x03, 0x04, 0x05], [s.hex() for s in sent]
+    assert [s[0] for s in sent] == [0x02, 0x03, 0x05, 0x04], [s.hex() for s in sent]
 
 
 def test_vital_signs_packet():

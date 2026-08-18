@@ -5,11 +5,11 @@ from lib_ModbusRTUDevice import ModbusRTUDevice, ModbusRTU_Frame, ModbusExceptio
 """
 气体传感器485 Modbus-RTU协议通信底层库
 
-传感器类型      地址
+传感器类型      地址   （地址已按真机实测确认：0x04为甲烷、0x05为氧气）
 烟雾传感器      0x02
 CO2传感器       0x03
-氧气传感器      0x04
-甲烷传感器      0x05
+甲烷传感器      0x04
+氧气传感器      0x05
 """
 
 class GasSensor:
@@ -27,13 +27,13 @@ class GasSensor:
         """
         self.sensor_type = sensor_type
         self.address = address
-        # 传感器地址（与文件头部注释、lib_ModbusRTUDevice 保持一致）：
-        # 烟雾 0x02 / CO2 0x03 / 氧气 0x04 / 甲烷 0x05
+        # 传感器地址（按真机实测确认，与文件头部注释一致）：
+        # 烟雾 0x02 / CO2 0x03 / 甲烷 0x04 / 氧气 0x05
         self.sensor_address_map = {
             "smoke_sensor": 0x02,
             "co2_sensor": 0x03,
-            "o2_sensor": 0x04,
-            "ch4_sensor": 0x05
+            "ch4_sensor": 0x04,
+            "o2_sensor": 0x05
         }
         if sensor_type in self.sensor_address_map:
             self.address = self.sensor_address_map[sensor_type]
