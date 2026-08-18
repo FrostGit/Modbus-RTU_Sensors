@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多模态传感器远程监看</title>
+<style>
+  body { margin:0; background:#1e1e2e; color:#eee; font-family:"Microsoft YaHei",sans-serif; }
+  header { padding:10px 16px; font-size:18px; display:flex; align-items:baseline; gap:12px; }
+  #status { font-size:13px; color:#8a8aa0; }
+  #grid { display:grid; grid-template-columns:repeat(8,1fr); gap:6px; padding:0 10px 12px; }
+  .card { background:#27293d; border-radius:6px; padding:6px 8px; }
+  .card .title { font-size:12px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  canvas { width:100%; height:110px; display:block; }
+</style>
+</head>
+<body>
+<header>多模态传感器数据采集 <span id="status">连接中...</span></header>
+<div id="grid"></div>
+<script>
+"use strict";
+const MAX = 300, POLL_MS = 300;
+// matplotlib 单字母颜色 -> CSS
+const CMAP = {r:'#e74c3c', g:'#2ecc71', b:'#3498db', y:'#f1c40f',
+              c:'#00bcd4', m:'#e91e63', k:'#cfcfcf'};
+const channels = [];     // {key,title,unit,color,data:[]}
+const buf = {};          // key -> [{t,v}]
+const canvases = {};     // key -> <canvas>
+let lastTs = 0;
+
+async function getJSON(url){
+  const r = await fetch(url);
+  return r.json();
+}
+
+async function init(){
+  const meta = await getJSON('/api/meta');
+  const grid = document.getElementById('grid');
+  for(const [row, col, key] of meta.placement){
+    const c = meta.curves[key];
+    const ch = {key, title:c.title, unit:c.unit,
+                color:(CMAP[c.color]||c.color), data:[]};
+    channels.push(ch);
+    buf[key] = [];
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<div class="title">${ch.title}${ch.unit?' ('+ch.unit+')':''}</div><canvas></canvas>`;
+    grid.appendChild(card);
+    canvases[key] = card.querySelector('canvas');
+  }
+  setInterval(loop, POLL_MS);
+  loop();
+}
+
+function drawChannel(ch){
+  const cv = canvases[ch.key];
+  const ctx = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if(!w || !h) return;
+  if(cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)){
+    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  const data = ch.data;
+  if(data.length < 2) return;
+  let min = Infinity, max = -Infinity;
+  for(const p of data){
+    if(p.v == null) continue;
+    if(p.v < min) min = p.v;
+    if(p.v > max) max = p.v;
+  }
+  if(!isFinite(min) || !isFinite(max)) return;
+  if(max === min){ max += 1; min -= 1; }
+  const t0 = data[0].t, t1 = data[data.length-1].t, tr = (t1-t0)||1;
+  ctx.strokeStyle = ch.color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  let pen = false;
+  for(const p of data){
+    if(p.v == null){ pen = false; continue; }   // None -> 断口
+    const x = (p.t - t0) / tr * w;
+    const y = h - (p.v - min) / (max - min) * h;
+    if(!pen){ ctx.moveTo(x, y); pen = true; }
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+async function loop(){
+  try{
+    const d = await getJSON('/api/data');
+    if(!d.ts || d.ts === lastTs) return;   // 同一轮数据不重复追加
+    lastTs = d.ts;
+    document.getElementById('status').textContent =
+      `更新 ${new Date(d.ts*1000).toLocaleTimeString()}`;
+    for(const ch of channels){
+      const v = d.values[ch.key];
+      buf[ch.key].push({t:d.ts, v:(v==null?null:Number(v))});
+      if(buf[ch.key].length > MAX) buf[ch.key].shift();
+      ch.data = buf[ch.key];
+    }
+    for(const ch of channels) drawChannel(ch);
+  }catch(e){ /* 服务未就绪时静默重试 */ }
+}
+
+init();
+</script>
+</body>
+</html>

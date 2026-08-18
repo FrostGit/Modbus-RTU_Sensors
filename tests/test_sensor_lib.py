@@ -309,6 +309,36 @@ def test_vital_signs_packet():
     assert len(pkt.rra) == 6
 
 
+def test_sensor_acq_channels():
+    """sensor_acq 通道元数据与采集输出键一致（35 路）"""
+    import sensor_acq
+    # 35 路 = 气体4 + 气象6 + 电源4 + 土壤8 + 生命体征13
+    assert len(sensor_acq.CURVES) == 35, len(sensor_acq.CURVES)
+    expected = {
+        "smoke", "co2", "o2", "ch4",
+        "temperature", "humidity", "dewpoint", "pressure", "altitude", "air_density",
+        "voltage", "current", "power", "energy",
+        "soil_temp", "soil_moisture", "soil_ec", "soil_salty",
+        "soil_nitro", "soil_phosphorus", "soil_potassium", "soil_ph",
+        "heart_rate", "spo2", "bk", "fatigue_index",
+        "systolic_pressure", "diastolic_pressure",
+        "cardiac_output", "peripheral_resistance", "rr_variability",
+        "sdnn", "rmssd", "nn50", "pnn50",
+    }
+    assert set(sensor_acq.CURVES) == expected
+    # 布局中的通道恰好是全部 35 路，无遗漏无重复
+    placed = [k for _, _, k in sensor_acq.PLACEMENT]
+    assert len(placed) == 35
+    assert set(placed) == expected
+    # 生命体征字段与通道一一对应
+    assert set(sensor_acq.VITAL_FIELDS) == expected & {
+        "heart_rate", "spo2", "bk", "fatigue_index",
+        "systolic_pressure", "diastolic_pressure",
+        "cardiac_output", "peripheral_resistance", "rr_variability",
+        "sdnn", "rmssd", "nn50", "pnn50",
+    }
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     passed = 0

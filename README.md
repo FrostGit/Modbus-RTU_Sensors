@@ -12,7 +12,9 @@
 | `soil_sensor.py` / `soil_sensor_plt.py` | 土壤传感器驱动 / 实时绘图 |
 | `heart_rate_sensor.py` | 生命体征传感器驱动（88 字节协议包解析、帧同步，含 HRV/血压等指标） |
 | `sensor_hub.py` / `sensor_hub_plt.py` | 气体传感器 HUB 驱动 / 实时绘图 |
-| `big_plt_demo.py` | 多传感器综合大屏（5×8 大表格，35 路曲线，含生命体征面板） |
+| `big_plt_demo.py` | 多传感器综合大屏（本地 matplotlib，5×8 大表格，35 路曲线，blit 增量绘制） |
+| `web_dashboard.py` / `web/` | 远程监看服务（Flask + Web 前端绘制 35 路曲线，浏览器访问） |
+| `sensor_acq.py` | 采集公共模块（big_plt 与 web_dashboard 共用同一套批量读逻辑） |
 | `demo.py` | 单传感器读取示例 |
 | `99-sensor-devices.rules` | udev 规则，将 USB 串口设备固定为符号链接 |
 | `tests/test_sensor_lib.py` | 回归测试（假串口，无需真实硬件） |
@@ -44,7 +46,7 @@ udev 规则按 `idVendor`/`idProduct`/`devpath`/`serial` 多层匹配，将 CH34
 ## 运行环境
 
 - Python 3.8+（开发目标板：RDK X3）
-- 依赖：`pyserial`、`numpy`、`matplotlib`、`Pillow`；`crcmod` 可选（缺失时自动使用内置纯 Python CRC16 实现）
+- 依赖：`pyserial`、`numpy`、`matplotlib`、`Pillow`；`crcmod` 可选（缺失时自动使用内置纯 Python CRC16 实现）；`web_dashboard.py` 另需 `flask`
 
 ```bash
 pip install pyserial numpy matplotlib pillow crcmod
@@ -53,8 +55,13 @@ pip install pyserial numpy matplotlib pillow crcmod
 ## 使用
 
 ```bash
-# 多传感器综合大屏（大表格展示，含生命体征面板）
+# 多传感器综合大屏（本地 matplotlib，blit 增量绘制）
 python3 big_plt_demo.py
+
+# 远程监看（Flask + Web，浏览器打开 http://<主机IP>:5000/）
+pip install flask   # 首次需要
+python3 web_dashboard.py
+python3 web_dashboard.py --port 8080
 
 # 单个传感器绘图 demo
 python3 air_sensor_plt.py
