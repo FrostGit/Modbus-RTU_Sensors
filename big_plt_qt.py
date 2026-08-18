@@ -161,6 +161,7 @@ class BigPltQt(QWidget):
             print("警告: 没有任何传感器加载成功，界面空转（仅显示'--'）")
         vital_cache = {}
         t0 = time.monotonic()
+        values = {}
         while not self.stop.is_set():
             try:
                 values, vital_cache = read_round(sensors, vital_cache)
@@ -169,6 +170,7 @@ class BigPltQt(QWidget):
                     self.state["ts"] = time.monotonic() - t0
             except Exception as e:
                 print(f"采集异常: {e}")
+                values = {}
             if not sensors:
                 time.sleep(0.5)  # 无硬件时空转，避免忙等刷屏
             elif len(values) == 0:
