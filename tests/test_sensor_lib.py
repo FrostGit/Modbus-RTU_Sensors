@@ -346,6 +346,10 @@ def test_sensor_acq_channels():
     assert {"soil_nitro", "soil_phosphorus", "soil_potassium"} <= set(sensor_acq.CARD_CHANNELS)
     # 生命体征其余参数不在本地折线中（仅web卡片）
     assert set(sensor_acq.VITAL_CARD_CHANNELS).isdisjoint(sensor_acq.LINE_CHANNELS)
+    # 固定Y量程只针对折线通道，且取值合法
+    assert set(sensor_acq.Y_RANGES) <= set(sensor_acq.LINE_CHANNELS)
+    for v in sensor_acq.Y_RANGES.values():
+        assert v[0] < v[1], v
 
 
 def main():

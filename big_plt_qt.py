@@ -34,7 +34,7 @@ except ImportError:
     Image = None  # logo 仅为装饰，缺 PIL 时跳过
 
 from sensor_acq import (CARD_CHANNELS, CARD_KEYS, LINE_CHANNELS, LINE_PLACEMENT,
-                        init_sensors, read_round)
+                        Y_RANGES, init_sensors, read_round)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WINDOW = 300      # 保留最近 300 个采样点
@@ -114,6 +114,9 @@ class BigPltQt(QWidget):
             curve = pw.plot([], [], pen=pg.mkPen(COLORS.get(color, "#eee"), width=2),
                             antialias=False)
             pw.setMouseEnabled(x=False, y=False)
+            # 固定 Y 量程：省去每帧自动缩放(CPU)且轴不跳动；无配置的通道自动缩放
+            if key in Y_RANGES:
+                pw.setYRange(*Y_RANGES[key], padding=0)
             grid.addWidget(pw, row, col)
             self.plots[key] = (pw, curve)
 

@@ -99,6 +99,29 @@ VITAL_FIELDS = [
 
 VITAL_TIMEOUT = 0.05  # 只检查缓冲区，避免每轮干等
 
+# ---- 折线通道固定 Y 轴量程: key -> (min, max) ----
+# 目的: 关闭每帧自动缩放(省 CPU)并避免轴跳动；未列出的通道保持自动缩放
+Y_RANGES = {
+    "smoke": (0, 100),        # ppm
+    "co2": (300, 2000),       # ppm
+    "o2": (0, 25),            # %VOL
+    "ch4": (0, 100),          # %LEL
+    "temperature": (0, 50),   # ℃
+    "humidity": (0, 100),     # %
+    "dewpoint": (0, 50),      # ℃
+    "pressure": (950, 1050),  # hPa
+    "voltage": (0, 20),       # V
+    "current": (0, 10),       # A
+    "power": (0, 100),        # W
+    "soil_temp": (0, 50),     # ℃
+    "soil_moisture": (0, 100),  # %
+    "soil_ec": (0, 2000),     # µS/cm
+    "soil_salty": (0, 2000),  # mg/L
+    "soil_ph": (3, 10),       # pH
+    "heart_rate": (40, 220),  # bpm
+    "spo2": (85, 100),        # %
+}
+
 
 def init_sensors(ports=None, vital=True):
     """实例化驱动对象（一次创建，全程复用；失败不影响其他传感器）
