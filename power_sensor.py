@@ -147,7 +147,7 @@ class PowerSensor(ModbusRTUDevice):
             energy_raw = (response[3] << 24) | (response[4] << 16) | (response[5] << 8) | response[6]
             if energy_raw >= 0x80000000:  # 处理有符号整数
                 energy_raw -= 0x100000000
-            energy = energy_raw /10.0 # 数据为0.1Wh,转换为实际电量值
+            energy = energy_raw / 10000.0  # 寄存器单位为0.0001Wh(实测校准: 80KWh≈8e8原始值)
             return energy
         else:
             raise ModbusException("Failed to read energy")
@@ -163,10 +163,10 @@ class PowerSensor(ModbusRTUDevice):
         if len(response) != 21:  # 1地址+1功能+1字节数+16数据+2CRC
             raise ModbusException("Failed to read all power values")
         fields = [
-            ("voltage", 0.001),  # mV -> V
-            ("current", 0.001),  # mA -> A
-            ("power",   0.001),  # mW -> W
-            ("energy",  0.1),    # 0.1Wh -> Wh
+            ("voltage", 0.001),   # mV -> V
+            ("current", 0.001),   # mA -> A
+            ("power",   0.001),   # mW -> W
+            ("energy",  0.0001),  # 寄存器0.0001Wh -> Wh (实测校准)
         ]
         values = {}
         for i, (name, scale) in enumerate(fields):

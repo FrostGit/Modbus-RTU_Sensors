@@ -238,8 +238,8 @@ def test_soil_read_all():
 
 
 def test_power_read_all():
-    # 4 个 int32: 电压=12.345V(12345), 电流=0.5A(500), 功率=6.0W(6000), 电量=12.3Wh(123)
-    raw = [12345, 500, 6000, 123]
+    # 4 个 int32: 电压=12.345V(12345), 电流=0.5A(500), 功率=6.0W(6000), 电量=80KWh(800000000×0.0001)
+    raw = [12345, 500, 6000, 800000000]
     data = b"".join(struct.pack(">i", r) for r in raw)
     payload = bytes([0x01, 0x03, 0x10]) + data
     dev = make_power(with_crc(payload))
@@ -247,7 +247,7 @@ def test_power_read_all():
     assert v["voltage"] == 12.345
     assert v["current"] == 0.5
     assert v["power"] == 6.0
-    assert v["energy"] == 12.3
+    assert v["energy"] == 80000.0  # 0.0001Wh 缩放(实测校准)
 
 
 def test_hub_address_map():
