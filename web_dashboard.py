@@ -36,6 +36,7 @@ def collector(interval: float):
     sensors = sensor_acq.init_sensors()
     vital_cache = {}
     while not STOP.is_set():
+        t_round = time.time()
         try:
             values, vital_cache = sensor_acq.read_round(sensors, vital_cache)
             with LOCK:
@@ -45,6 +46,11 @@ def collector(interval: float):
                 STATE["rra"] = vital_cache.get("rra", [])
         except Exception as e:
             print(f"采集异常: {e}")
+        # 最低轮询节流：正常一轮约330ms；读失败时一轮仅几毫秒，
+        # 补足到 >=0.1s，防止采集线程空转烧 CPU
+        dt = time.time() - t_round
+        if dt < 0.1:
+            time.sleep(0.1 - dt)
         if interval > 0:
             time.sleep(interval)
 

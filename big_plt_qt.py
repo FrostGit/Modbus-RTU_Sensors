@@ -163,6 +163,7 @@ class BigPltQt(QWidget):
         t0 = time.monotonic()
         values = {}
         while not self.stop.is_set():
+            t_round = time.monotonic()
             try:
                 values, vital_cache = read_round(sensors, vital_cache)
                 with self.lock:
@@ -173,8 +174,12 @@ class BigPltQt(QWidget):
                 values = {}
             if not sensors:
                 time.sleep(0.5)  # 无硬件时空转，避免忙等刷屏
-            elif len(values) == 0:
-                time.sleep(0.2)
+            else:
+                # 最低轮询节流：正常一轮约330ms 无需补；读失败时一轮仅几毫秒，
+                # 补足到 >=0.1s，防止采集线程空转烧 CPU
+                dt = time.monotonic() - t_round
+                if dt < 0.1:
+                    time.sleep(0.1 - dt)
 
     def _refresh(self):
         """GUI 主线程：有新数据才更新曲线与卡片"""
