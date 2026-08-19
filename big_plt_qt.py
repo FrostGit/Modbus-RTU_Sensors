@@ -65,10 +65,12 @@ def load_cjk_font():
 
 
 class BigPltQt(QWidget):
-    def __init__(self, window=WINDOW, poll_ms=POLL_MS):
+    def __init__(self, window=WINDOW, poll_ms=POLL_MS, skip_frames=1):
         super().__init__()
         self.window = window
         self.poll_ms = poll_ms
+        self.skip_frames = skip_frames
+        self._frame = 0
 
         self.setWindowTitle("多模态传感器综合大屏 (pyqtgraph)")
         self.resize(1600, 900)
@@ -193,6 +195,12 @@ class BigPltQt(QWidget):
             self.last_ts = ts
             values = dict(self.state["values"])
 
+        # 显示帧节流：--skip-frames N 时每 N 个新数据点才重绘一次图表
+        # （采集仍每轮进行，仅降低渲染频率以省 CPU）
+        self._frame += 1
+        if self.skip_frames > 1 and self._frame % self.skip_frames != 0:
+            return
+
         self.times.append(ts)
         for key, (pw, curve) in self.plots.items():
             self.series[key].append(values.get(key))
@@ -212,10 +220,12 @@ def main():
     parser = argparse.ArgumentParser(description="多模态传感器综合大屏(pyqtgraph)")
     parser.add_argument("--window", type=int, default=WINDOW)
     parser.add_argument("--poll-ms", type=int, default=POLL_MS)
+    parser.add_argument("--skip-frames", type=int, default=1,
+                        help="每N个新数据点才重绘一次图表(省CPU, X3上2可降约一半)")
     args = parser.parse_args()
 
     app = pg.mkQApp()
-    win = BigPltQt(window=args.window, poll_ms=args.poll_ms)
+    win = BigPltQt(window=args.window, poll_ms=args.poll_ms, skip_frames=args.skip_frames)
     win.show()
     print("开始采集（pyqtgraph 实时大屏），关闭窗口或 Ctrl+C 退出...")
     try:
