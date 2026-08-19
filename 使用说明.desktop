@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=大屏使用说明
+Name[en]=Usage Guide
+Comment=启动与使用说明（README 渲染版）
+Exec=xdg-open /home/sunrise/DataGraber_ws/Sensors/485GasSensors/使用说明.html
+Icon=text-html
+Terminal=false
+Categories=Documentation;
+StartupNotify=false

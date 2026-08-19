@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>多模态传感器数据采集 - 使用说明</title>
+<style>
+body { font-family:"Microsoft YaHei",sans-serif; margin:0; background:#1e1e2e; color:#ddd; line-height:1.7; }
+.wrap { max-width:920px; margin:0 auto; padding:24px 20px 60px; }
+h1 { color:#fff; border-bottom:2px solid #3498db; padding-bottom:10px; }
+h2 { color:#7ec8f7; margin-top:32px; border-left:4px solid #3498db; padding-left:10px; }
+h3 { color:#cfd8dc; }
+code { background:#2a2a3e; padding:2px 6px; border-radius:4px; font-family:Consolas,monospace; color:#ffd47e; }
+pre { background:#27293d; padding:12px 14px; border-radius:8px; overflow-x:auto; font-size:14px; }
+pre code { background:none; color:#a5e075; padding:0; }
+table { border-collapse:collapse; width:100%; margin:10px 0; }
+th,td { border:1px solid #3a3a52; padding:6px 10px; text-align:left; font-size:14px; }
+th { background:#2a2a3e; }
+li { margin:3px 0; }
+a { color:#7ec8f7; }
+</style>
+</head>
+<body><div class="wrap">
+<h1>Modbus-RTU 传感器数据采集</h1>
+
+<p>基于 Modbus RTU 协议的 485 总线传感器数据采集与实时可视化项目。包含多类传感器驱动（空气、电能、土壤、心率/生命体征、气体传感器 HUB 等）以及基于 matplotlib 的实时绘图程序（离线采集 + 可视化展示）。</p>
+
+<h2>文件说明</h2>
+
+<table><thead><tr><th>文件</th><th>说明</th></tr></thead><tbody>
+<tr><td><code>lib_ModbusRTUDevice.py</code></td><td>Modbus RTU 通信基础库：帧封装/解析、CRC16 校验、异常处理、读写响应解析（crcmod 缺失时自动注入纯 Python 实现）</td></tr>
+<tr><td><code>air_sensor.py</code> / <code>air_sensor_plt.py</code> / <code>air_sensor_record.py</code></td><td>空气（气象）传感器驱动 / 实时绘图 / <b>CSV 离线记录</b></td></tr>
+<tr><td><code>power_sensor.py</code> / <code>power_sensor_plt.py</code></td><td>电能传感器驱动 / 实时绘图</td></tr>
+<tr><td><code>soil_sensor.py</code> / <code>soil_sensor_plt.py</code></td><td>土壤传感器驱动 / 实时绘图</td></tr>
+<tr><td><code>heart_rate_sensor.py</code></td><td>生命体征传感器驱动（88 字节协议包解析、帧同步，含 HRV/血压等指标）</td></tr>
+<tr><td><code>sensor_hub.py</code> / <code>sensor_hub_plt.py</code></td><td>气体传感器 HUB 驱动 / 实时绘图</td></tr>
+<tr><td><code>big_plt_demo.py</code></td><td>多传感器综合大屏（matplotlib 版：19 路折线 + 5 卡片，适合 PC 端）</td></tr>
+<tr><td><code>big_plt_qt.py</code></td><td>多传感器综合大屏（<b>pyqtgraph 实时版，X3 本地显示推荐</b>：19 折线 + 5 卡片，每帧 &lt;50ms）</td></tr>
+<tr><td><code>web_dashboard.py</code> / <code>web/</code></td><td>远程监看服务（Flask + Web：19 路折线 + 16 个数字卡片 + 脉搏波 + RR 散点）</td></tr>
+<tr><td><code>heart_wave_plt.py</code></td><td>生命体征波形快速显示（脉搏波滚动 + RR 间期散点）</td></tr>
+<tr><td><code>sensor_acq.py</code></td><td>采集公共模块（big_plt 与 web_dashboard 共用同一套批量读逻辑）</td></tr>
+<tr><td><code>demo.py</code></td><td>单传感器读取示例</td></tr>
+<tr><td><code>99-sensor-devices.rules</code></td><td>udev 规则，将 USB 串口设备固定为符号链接</td></tr>
+<tr><td><code>tests/test_sensor_lib.py</code></td><td>回归测试（假串口，无需真实硬件）</td></tr>
+<tr><td><code>logo.jpg</code> / <code>title.png</code> / <code>STSONG.TTF</code></td><td>绘图界面资源（背景图、标题图、中文字体）</td></tr>
+</tbody></table>
+
+<h2>传感器与串口设备映射</h2>
+
+<table><thead><tr><th>设备</th><th>串口</th><th>udev 符号链接</th></tr></thead><tbody>
+<tr><td>power_sensor（电能）</td><td>ttyACM0</td><td><code>/dev/power_sensor</code></td></tr>
+<tr><td>so100-main</td><td>ttyACM1</td><td>-</td></tr>
+<tr><td>so100-sub</td><td>ttyACM2</td><td>-</td></tr>
+<tr><td>gas_hub（气体 HUB）</td><td>ttyUSB0</td><td><code>/dev/gas_hub</code></td></tr>
+<tr><td>vital_signs（生命体征）</td><td>ttyUSB1</td><td><code>/dev/vital_signs</code></td></tr>
+<tr><td>soil_sensor（土壤）</td><td>ttyUSB2</td><td><code>/dev/soil_sensor</code></td></tr>
+<tr><td>hr_band（心率）</td><td>ttyUSB3</td><td><code>/dev/hr_band</code></td></tr>
+<tr><td>weather_sensor（气象）</td><td>ttyUSB4</td><td><code>/dev/weather_sensor</code></td></tr>
+</tbody></table>
+
+<p>udev 规则按 <code>idVendor</code>/<code>idProduct</code>/<code>devpath</code>/<code>serial</code> 多层匹配，将 CH340（1a86:7523/55d4）、CP210x（10c4:ea60）等 USB 转串口设备固定为稳定设备名，避免拔插后 tty 编号漂移。</p>
+
+<h2>驱动设计要点</h2>
+
+<ul><li><b>批量读</b>：气象 6 / 土壤 8 / 电源 8 寄存器各自连续，<code>read_all()</code> 一次 Modbus 往返读回（全量一轮从 22 次往返降到 4 次，约 0.4s）</li><li><b>对象复用</b>：驱动实例化一次、全程复用，不再每读一次 new+close 串口</li><li><b>写操作</b>：<code>set_*</code>/<code>clear_*</code> 等写寄存器方法使用 0x06 功能码与 Value 字段，基础库正确解析写回显</li><li><b>容错</b>：绘图脚本每轮只追加一次时间戳，单传感器失败记 <code>None</code>（曲线断口），列表不产生错位</li><li><b>时间轴</b>：横轴为相对时间（秒），环形缓冲保留最近 300~600 个采样点，内存有上限</li></ul>
+
+<h2>运行环境</h2>
+
+<ul><li>Python 3.8+（开发目标板：RDK X3）</li><li>依赖：<code>pyserial</code>、<code>numpy</code>、<code>matplotlib</code>、<code>Pillow</code>；<code>crcmod</code> 可选（缺失时自动使用内置纯 Python CRC16 实现）；<code>web_dashboard.py</code> 另需 <code>flask</code>；<code>big_plt_qt.py</code> 另需 <code>pyqt5</code> + <code>pyqtgraph</code></li></ul>
+
+<pre>pip install pyserial numpy matplotlib pillow crcmod</pre>
+
+<h2>使用</h2>
+
+<pre># X3 本地实时大屏（pyqtgraph，推荐；X3 上 matplotlib 渲染约 3.6s/帧，本方案 &lt;50ms）
+# 注意: PyPI 无 aarch64 预编译 wheel，PyQt5 必须用 apt 装，勿用 pip(会卡在源码编译)
+sudo apt install -y python3-pyqt5 python3-pyqtgraph   # Debian 系(X3)
+# 若 apt 无 python3-pyqtgraph: pip3 install --user pyqtgraph (纯Python不编译)
+python3 big_plt_qt.py
+
+# 多传感器大屏（matplotlib 版，PC 端用）
+python3 big_plt_demo.py --draw-every 2
+
+# 生命体征波形快速显示（脉搏波 + RR 散点）
+python3 heart_wave_plt.py
+
+# 远程监看（Flask + Web，浏览器打开 http://&lt;主机IP&gt;:5000/）
+pip install flask   # 首次需要
+python3 web_dashboard.py
+python3 web_dashboard.py --port 8080
+
+# 单个传感器绘图 demo
+python3 air_sensor_plt.py
+python3 power_sensor_plt.py
+python3 soil_sensor_plt.py
+python3 sensor_hub_plt.py
+
+# 气象传感器离线记录（CSV 落盘 + 实时绘图，Ctrl+C 停止）
+python3 air_sensor_record.py                 # 默认每 1 秒采一次
+python3 air_sensor_record.py --interval 2    # 每 2 秒采一次
+python3 air_sensor_record.py --out /tmp/air.csv
+
+# 单传感器读取示例
+python3 demo.py --sensor_type air_sensor
+python3 demo.py --sensor_type heart_rate_sensor
+
+# 回归测试（无需硬件）
+python3 tests/test_sensor_lib.py</pre>
+
+<p>udev 规则部署（root）：</p>
+
+<pre>sudo cp 99-sensor-devices.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
+
+<p>访问串口需要 <code>dialout</code> 组权限：</p>
+
+<pre>sudo usermod -aG dialout $USER</pre>
+
+<h2>Git 说明</h2>
+
+<ul><li>仓库：<code>git@github.com:FrostGit/Modbus-RTU_Sensors.git</code></li><li>分支：<code>master</code> / <code>devel</code> / <code>dev-HeartRateSonsor</code></li><li>本目录为从 RDK X3（<code>~/DataGraber_ws/Sensors/485GasSensors</code>）备份的工作副本；驱动库全部在本工作区内自包含，与 DataLabelApp 设备端（同机部署）的驱动保持同步维护</li></ul>
+</div></body>
+</html>
