@@ -58,7 +58,9 @@ pip install pyserial numpy matplotlib pillow crcmod
 
 ```bash
 # X3 本地实时大屏（pyqtgraph，推荐；X3 上 matplotlib 渲染约 3.6s/帧，本方案 <50ms）
-pip3 install pyqt5 pyqtgraph   # 首次需要
+# 注意: PyPI 无 aarch64 预编译 wheel，PyQt5 必须用 apt 装，勿用 pip(会卡在源码编译)
+sudo apt install -y python3-pyqt5 python3-pyqtgraph   # Debian 系(X3)
+# 若 apt 无 python3-pyqtgraph: pip3 install --user pyqtgraph (纯Python不编译)
 python3 big_plt_qt.py
 
 # 多传感器大屏（matplotlib 版，PC 端用）
