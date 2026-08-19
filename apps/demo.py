@@ -9,6 +9,15 @@ Args:
     --serial_port: 串口路径（默认按传感器类型取 udev 符号链接）
     --interval:    采样间隔（秒，默认 0.2）
 """
+
+import os
+import sys
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_BASE, os.path.join(_BASE, "core"), os.path.join(_BASE, "drivers")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import argparse
 import time
 

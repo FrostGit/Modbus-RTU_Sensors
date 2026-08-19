@@ -11,6 +11,15 @@
 
 Ctrl+C 停止，自动关闭文件并打印统计。
 """
+
+import os
+import sys
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_BASE, os.path.join(_BASE, "core"), os.path.join(_BASE, "drivers")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import argparse
 import csv
 import os
@@ -25,7 +34,7 @@ from matplotlib import font_manager
 from air_sensor import Modbus_Air_Sensor
 from lib_ModbusRTUDevice import ModbusException
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.join(_BASE, "assets")
 WINDOW = 600  # 绘图保留最近 600 个采样点
 FIELDS = ["temperature", "humidity", "dewpoint", "pressure", "altitude", "air_density"]
 

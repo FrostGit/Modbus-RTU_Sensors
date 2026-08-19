@@ -16,6 +16,15 @@
     python3 big_plt_demo.py
     python3 big_plt_demo.py --draw-every 2    # 每2轮采集重绘一次(X3建议)
 """
+
+import os
+import sys
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_BASE, os.path.join(_BASE, "core"), os.path.join(_BASE, "drivers")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import argparse
 import os
 import time
@@ -29,7 +38,7 @@ from PIL import Image
 from sensor_acq import (CARD_CHANNELS, CARD_KEYS, LINE_CHANNELS, LINE_PLACEMENT,
                         init_sensors, read_round)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.join(_BASE, "assets")
 WINDOW = 300      # 保留最近 300 个采样点
 DRAW_EVERY = 1    # 每 N 轮采集重绘一次
 

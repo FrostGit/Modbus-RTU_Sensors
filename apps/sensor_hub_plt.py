@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""电源传感器实时绘图
+"""气体传感器 HUB 实时绘图
 
-- 驱动对象实例化一次、批量读 4 项参数（1 次 Modbus 往返）
+- 驱动对象实例化一次，4 个从站地址不同需 4 次串行往返
 - 每轮曲线同步对齐，单点失败记 None（曲线断口）
 - 横轴为相对时间(秒)，保留最近 WINDOW 个采样点
 """
+
+import os
+import sys
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_BASE, os.path.join(_BASE, "core"), os.path.join(_BASE, "drivers")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import os
 import time
 from collections import deque
@@ -14,24 +23,24 @@ import matplotlib.pyplot as plt
 from matplotlib import font_manager
 
 from lib_ModbusRTUDevice import ModbusException
-from power_sensor import PowerSensor
+from sensor_hub import Modbus_Sensor_Hub
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.join(_BASE, "assets")
 WINDOW = 300
-PORT = "/dev/power_sensor"
+PORT = "/dev/gas_hub"
 
 my_font = font_manager.FontProperties(fname=os.path.join(BASE_DIR, "STSONG.TTF"))
 
 FIELDS = [
-    ("voltage", "电压", "V", "r"),
-    ("current", "电流", "A", "g"),
-    ("power", "功率", "W", "b"),
-    ("energy", "累计电量", "Wh", "y"),
+    ("smoke", "烟雾传感器", "ppm", "r"),
+    ("co2", "二氧化碳传感器", "ppm", "g"),
+    ("o2", "氧气传感器", "%VOL", "b"),
+    ("ch4", "甲烷传感器", "%LEL", "y"),
 ]
 
 plt.ion()
 fig, axes = plt.subplots(2, 2, figsize=(20, 12))
-fig.suptitle("多模态数据采集平台-电源类传感器数据", fontsize=16, fontproperties=my_font)
+fig.suptitle("多模态数据采集平台-气体类传感器数据", fontsize=16, fontproperties=my_font)
 plt.tight_layout(rect=[0, 0, 1, 0.96])
 
 lines = {}
@@ -46,7 +55,7 @@ for i, (key, title, unit, color) in enumerate(FIELDS):
     series[key] = deque(maxlen=WINDOW)
 times = deque(maxlen=WINDOW)
 
-sensor = PowerSensor(serial_port=PORT, baudrate=9600, timeout=1)  # 实例化一次，全程复用
+sensor = Modbus_Sensor_Hub(serial_port=PORT)  # 实例化一次，全程复用
 
 t0 = time.time()
 while True:

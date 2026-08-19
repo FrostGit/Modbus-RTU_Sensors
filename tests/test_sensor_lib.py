@@ -11,11 +11,18 @@
 - 各驱动 read_all() 批量读解析（气象/土壤/电源/气体 HUB）
 - 生命体征 88 字节包解析
 """
+
+import os
+import sys
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_BASE, os.path.join(_BASE, "core"), os.path.join(_BASE, "drivers")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import os
 import struct
 import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import lib_ModbusRTUDevice as lib  # noqa: E402
 from lib_ModbusRTUDevice import ModbusRTU_Frame, ModbusRTUDevice, ModbusException  # noqa: E402

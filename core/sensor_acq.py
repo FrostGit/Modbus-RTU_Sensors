@@ -8,6 +8,15 @@
 - 通道元数据（折线/卡片/布局）为唯一来源，本地与 Web 共用
 - 生命体征波形(acdata)与RR间期(rra)随采集缓存，供 web 波形面板与散点使用
 """
+
+import os
+import sys
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_BASE, os.path.join(_BASE, "core"), os.path.join(_BASE, "drivers")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import time
 
 from lib_ModbusRTUDevice import ModbusException

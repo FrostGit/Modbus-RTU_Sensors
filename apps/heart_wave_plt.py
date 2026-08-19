@@ -12,6 +12,15 @@
     python3 heart_wave_plt.py
     python3 heart_wave_plt.py --port /dev/vital_signs
 """
+
+import os
+import sys
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_BASE, os.path.join(_BASE, "core"), os.path.join(_BASE, "drivers")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import argparse
 import time
 from collections import deque

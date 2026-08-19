@@ -14,6 +14,15 @@ X3 上只跑采集 + HTTP 推送（无 matplotlib 渲染负担），35 路曲线
 
 浏览器打开: http://<主机IP>:5000/
 """
+
+import os
+import sys
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_BASE, os.path.join(_BASE, "core"), os.path.join(_BASE, "drivers")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import argparse
 import os
 import threading
@@ -24,7 +33,7 @@ from flask import Flask, jsonify, send_from_directory
 import sensor_acq
 
 app = Flask(__name__)
-WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+WEB_DIR = os.path.join(_BASE, "web")
 
 STATE = {"values": {}, "ts": 0.0}
 LOCK = threading.Lock()

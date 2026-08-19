@@ -15,6 +15,15 @@ pyqtgraph(Qt) 每帧 <50ms，可实时刷新。
     python3 big_plt_qt.py
     python3 big_plt_qt.py --window 300 --poll-ms 100
 """
+
+import os
+import sys
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_BASE, os.path.join(_BASE, "core"), os.path.join(_BASE, "drivers")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import argparse
 import os
 import sys
@@ -36,7 +45,7 @@ except ImportError:
 from sensor_acq import (CARD_CHANNELS, CARD_KEYS, LINE_CHANNELS, LINE_PLACEMENT,
                         Y_RANGES, init_sensors, read_round)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.join(_BASE, "assets")
 WINDOW = 300      # 保留最近 300 个采样点
 POLL_MS = 200     # GUI 刷新节拍(毫秒): 数据约3Hz(333ms)，200ms 足够且省 CPU
 

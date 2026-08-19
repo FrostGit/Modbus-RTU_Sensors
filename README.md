@@ -2,25 +2,40 @@
 
 基于 Modbus RTU 协议的 485 总线传感器数据采集与实时可视化项目。包含多类传感器驱动（空气、电能、土壤、心率/生命体征、气体传感器 HUB 等）以及基于 matplotlib 的实时绘图程序（离线采集 + 可视化展示）。
 
+## 目录结构
+
+```
+DataCollector/
+├── drivers/    # 传感器驱动（lib_ModbusRTUDevice, air, soil, power, sensor_hub, heart_rate）
+├── core/       # sensor_acq.py 采集公共模块
+├── apps/       # 可视化/记录/演示入口（big_plt_qt, big_plt_demo, web_dashboard, heart_wave_plt, 各*_plt, record, demo）
+├── web/        # Flask 远程监看前端
+├── tests/      # 回归测试（假串口，无需硬件）
+├── docs/       # make_usage_html.py（README → 使用说明.html 生成器）
+├── assets/     # 字体与图片资源（STSONG.TTF / logo.jpg / title.png）
+├── udev/       # 99-sensor-devices.rules
+├── desktop/    # 桌面快捷方式模板（big_plt_qt.desktop / 使用说明.desktop）
+├── README.md   # 本文档（唯一说明来源）
+└── 使用说明.html  # README 渲染版（docs/make_usage_html.py 生成，X3 桌面打开用）
+```
+
 ## 文件说明
 
 | 文件 | 说明 |
 |------|------|
-| `lib_ModbusRTUDevice.py` | Modbus RTU 通信基础库：帧封装/解析、CRC16 校验、异常处理、读写响应解析（crcmod 缺失时自动注入纯 Python 实现） |
-| `air_sensor.py` / `air_sensor_plt.py` / `air_sensor_record.py` | 空气（气象）传感器驱动 / 实时绘图 / **CSV 离线记录** |
-| `power_sensor.py` / `power_sensor_plt.py` | 电能传感器驱动 / 实时绘图 |
-| `soil_sensor.py` / `soil_sensor_plt.py` | 土壤传感器驱动 / 实时绘图 |
-| `heart_rate_sensor.py` | 生命体征传感器驱动（88 字节协议包解析、帧同步，含 HRV/血压等指标） |
-| `sensor_hub.py` / `sensor_hub_plt.py` | 气体传感器 HUB 驱动 / 实时绘图 |
-| `big_plt_demo.py` | 多传感器综合大屏（matplotlib 版：19 路折线 + 5 卡片，适合 PC 端） |
-| `big_plt_qt.py` | 多传感器综合大屏（**pyqtgraph 实时版，X3 本地显示推荐**：19 折线 + 5 卡片，每帧 <50ms） |
-| `web_dashboard.py` / `web/` | 远程监看服务（Flask + Web：19 路折线 + 16 个数字卡片 + 脉搏波 + RR 散点） |
-| `heart_wave_plt.py` | 生命体征波形快速显示（脉搏波滚动 + RR 间期散点） |
-| `sensor_acq.py` | 采集公共模块（big_plt 与 web_dashboard 共用同一套批量读逻辑） |
-| `demo.py` | 单传感器读取示例 |
-| `99-sensor-devices.rules` | udev 规则，将 USB 串口设备固定为符号链接 |
+| `drivers/lib_ModbusRTUDevice.py` | Modbus RTU 通信基础库：帧封装/解析、CRC16 校验、异常处理、读写响应解析（crcmod 缺失时自动注入纯 Python 实现） |
+| `drivers/air_sensor.py` 等 6 个驱动 | 气象 / 电能 / 土壤 / 心率生命体征 / 气体 HUB 驱动（各驱动可独立自测：`python3 drivers/air_sensor.py`） |
+| `core/sensor_acq.py` | 采集公共模块（批量读、通道元数据，big_plt 与 web 共用） |
+| `apps/big_plt_qt.py` | 多传感器综合大屏（**pyqtgraph 实时版，X3 本地显示推荐**：19 折线 + 5 卡片，每帧 <50ms） |
+| `apps/big_plt_demo.py` | 多传感器综合大屏（matplotlib 版，适合 PC 端） |
+| `apps/web_dashboard.py` / `web/` | 远程监看服务（Flask + Web：19 折线 + 16 卡片 + 脉搏波 + RR 散点） |
+| `apps/heart_wave_plt.py` | 生命体征波形快速显示（脉搏波滚动 + RR 间期散点） |
+| `apps/air_sensor_record.py` | 气象 CSV 离线记录 |
+| `apps/*_plt.py` / `apps/demo.py` | 单传感器绘图 / 单传感器读取示例 |
+| `udev/99-sensor-devices.rules` | udev 规则，将 USB 串口设备固定为符号链接 |
 | `tests/test_sensor_lib.py` | 回归测试（假串口，无需真实硬件） |
-| `logo.jpg` / `title.png` / `STSONG.TTF` | 绘图界面资源（背景图、标题图、中文字体） |
+| `desktop/*.desktop` | X3 桌面快捷方式模板（大屏 / 使用说明） |
+| `assets/` | 绘图界面资源（背景图、标题图、中文字体） |
 
 ## 传感器与串口设备映射
 
@@ -57,37 +72,43 @@ pip install pyserial numpy matplotlib pillow crcmod
 ## 使用
 
 ```bash
-# X3 本地实时大屏（pyqtgraph，推荐；X3 上 matplotlib 渲染约 3.6s/帧，本方案 <50ms）
+cd ~/DataGraber_ws/Sensors/485GasSensors
+
+# X3 本地实时大屏（pyqtgraph，推荐；也可双击桌面「多模态传感器大屏」图标）
 # 注意: PyPI 无 aarch64 预编译 wheel，PyQt5 必须用 apt 装，勿用 pip(会卡在源码编译)
 sudo apt install -y python3-pyqt5 python3-pyqtgraph   # Debian 系(X3)
-# 若 apt 无 python3-pyqtgraph: pip3 install --user pyqtgraph (纯Python不编译)
-python3 big_plt_qt.py
+# 若 apt 无 python3-pyqtgraph: python3 -m pip install --user pyqtgraph (纯Python不编译)
+python3 apps/big_plt_qt.py --skip-frames 2
 
 # 多传感器大屏（matplotlib 版，PC 端用）
-python3 big_plt_demo.py --draw-every 2
+python3 apps/big_plt_demo.py --draw-every 2
 
 # 生命体征波形快速显示（脉搏波 + RR 散点）
-python3 heart_wave_plt.py
+python3 apps/heart_wave_plt.py
 
 # 远程监看（Flask + Web，浏览器打开 http://<主机IP>:5000/）
 pip install flask   # 首次需要
-python3 web_dashboard.py
-python3 web_dashboard.py --port 8080
+python3 apps/web_dashboard.py
+python3 apps/web_dashboard.py --port 8080
 
 # 单个传感器绘图 demo
-python3 air_sensor_plt.py
-python3 power_sensor_plt.py
-python3 soil_sensor_plt.py
-python3 sensor_hub_plt.py
+python3 apps/air_sensor_plt.py
+python3 apps/power_sensor_plt.py
+python3 apps/soil_sensor_plt.py
+python3 apps/sensor_hub_plt.py
 
 # 气象传感器离线记录（CSV 落盘 + 实时绘图，Ctrl+C 停止）
-python3 air_sensor_record.py                 # 默认每 1 秒采一次
-python3 air_sensor_record.py --interval 2    # 每 2 秒采一次
-python3 air_sensor_record.py --out /tmp/air.csv
+python3 apps/air_sensor_record.py                 # 默认每 1 秒采一次
+python3 apps/air_sensor_record.py --interval 2    # 每 2 秒采一次
+python3 apps/air_sensor_record.py --out /tmp/air.csv
 
 # 单传感器读取示例
-python3 demo.py --sensor_type air_sensor
-python3 demo.py --sensor_type heart_rate_sensor
+python3 apps/demo.py --sensor_type air_sensor
+python3 apps/demo.py --sensor_type heart_rate_sensor
+
+# 驱动独立自测（无需应用层）
+python3 drivers/air_sensor.py
+python3 drivers/sensor_hub.py
 
 # 回归测试（无需硬件）
 python3 tests/test_sensor_lib.py
@@ -96,7 +117,7 @@ python3 tests/test_sensor_lib.py
 udev 规则部署（root）：
 
 ```bash
-sudo cp 99-sensor-devices.rules /etc/udev/rules.d/
+sudo cp udev/99-sensor-devices.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 

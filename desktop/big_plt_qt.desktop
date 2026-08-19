@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=多模态传感器大屏
+Name[en]=Sensor Dashboard
+Comment=pyqtgraph 实时传感器大屏（19折线+5卡片）
+Exec=python3 apps/big_plt_qt.py
+Path=/home/sunrise/DataGraber_ws/Sensors/485GasSensors
+Icon=utilities-system-monitor
+Terminal=false
+Categories=Utility;
+StartupNotify=false

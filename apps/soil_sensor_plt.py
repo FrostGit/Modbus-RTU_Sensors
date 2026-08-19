@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""气象传感器实时绘图
+"""土壤传感器实时绘图
 
-- 驱动对象实例化一次、批量读 6 项参数（1 次 Modbus 往返）
+- 驱动对象实例化一次、批量读 8 项参数（1 次 Modbus 往返）
 - 每轮曲线同步对齐，单点失败记 None（曲线断口）
 - 横轴为相对时间(秒)，保留最近 WINDOW 个采样点
 """
+
+import os
+import sys
+
+_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for _p in (_BASE, os.path.join(_BASE, "core"), os.path.join(_BASE, "drivers")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 import os
 import time
 from collections import deque
@@ -13,33 +22,35 @@ from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib import font_manager
 
-from air_sensor import Modbus_Air_Sensor
 from lib_ModbusRTUDevice import ModbusException
+from soil_sensor import Modbus_Soil_Sensor
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.join(_BASE, "assets")
 WINDOW = 300
-PORT = "/dev/weather_sensor"
+PORT = "/dev/soil_sensor"
 
 my_font = font_manager.FontProperties(fname=os.path.join(BASE_DIR, "STSONG.TTF"))
 
 FIELDS = [
-    ("temperature", "空气温度", "℃", "r"),
-    ("humidity", "空气湿度", "%", "g"),
-    ("dewpoint", "露点温度", "℃", "b"),
-    ("pressure", "大气压力", "hPa", "y"),
-    ("altitude", "海拔高度", "m", "c"),
-    ("air_density", "空气密度", "Kg/m³", "m"),
+    ("soil_temp", "土壤温度", "℃", "r"),
+    ("soil_moisture", "土壤湿度", "%", "g"),
+    ("soil_ec", "土壤电导率", "µS/cm", "b"),
+    ("soil_salty", "土壤盐分", "mg/L", "y"),
+    ("soil_nitro", "土壤氮含量", "mg/kg", "c"),
+    ("soil_phosphorus", "土壤磷含量", "mg/kg", "m"),
+    ("soil_potassium", "土壤钾含量", "mg/kg", "k"),
+    ("soil_ph", "土壤PH值", "pH", "r"),
 ]
 
 plt.ion()
-fig, axes = plt.subplots(2, 3, figsize=(20, 12))
-fig.suptitle("多模态数据采集平台-天气类传感器数据", fontsize=16, fontproperties=my_font)
+fig, axes = plt.subplots(2, 4, figsize=(20, 12))
+fig.suptitle("多模态数据采集平台-土壤类传感器数据", fontsize=16, fontproperties=my_font)
 plt.tight_layout(rect=[0, 0, 1, 0.96])
 
 lines = {}
 series = {}
 for i, (key, title, unit, color) in enumerate(FIELDS):
-    ax = axes[i // 3, i % 3]
+    ax = axes[i // 4, i % 4]
     line, = ax.plot([], [], color + '-', linewidth=2)
     ax.set_title(title, fontproperties=my_font)
     ax.set_ylabel(unit, fontproperties=my_font)
@@ -48,7 +59,7 @@ for i, (key, title, unit, color) in enumerate(FIELDS):
     series[key] = deque(maxlen=WINDOW)
 times = deque(maxlen=WINDOW)
 
-sensor = Modbus_Air_Sensor(serial_port=PORT)  # 实例化一次，全程复用
+sensor = Modbus_Soil_Sensor(serial_port=PORT)  # 实例化一次，全程复用
 
 t0 = time.time()
 while True:
