@@ -3,3 +3,5 @@ numpy
 matplotlib
 Pillow
 # crcmod 可选：缺失时 lib_ModbusRTUDevice.py 自动注入纯 Python CRC16 实现
+
+# big_plt_qt.py (pyqtgraph): X3/aarch64 上请用 apt 装 python3-pyqt5 python3-pyqtgraph（PyPI 无 aarch64 wheel，pip 会源码编译卡死）
