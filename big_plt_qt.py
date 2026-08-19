@@ -38,7 +38,7 @@ from sensor_acq import (CARD_CHANNELS, CARD_KEYS, LINE_CHANNELS, LINE_PLACEMENT,
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WINDOW = 300      # 保留最近 300 个采样点
-POLL_MS = 100     # GUI 刷新节拍(毫秒)
+POLL_MS = 200     # GUI 刷新节拍(毫秒): 数据约3Hz(333ms)，200ms 足够且省 CPU
 
 # matplotlib 单字母颜色 -> Qt 颜色
 COLORS = {
